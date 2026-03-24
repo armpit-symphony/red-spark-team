@@ -5,6 +5,8 @@ import httpx
 from dotenv import load_dotenv
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
+from security_utils import decrypt_secret
+
 
 load_dotenv()
 
@@ -40,7 +42,10 @@ async def run_provider_analysis(
 ) -> str:
     provider = provider_config["provider"]
     model = provider_config["model"]
-    api_key = provider_config.get("custom_api_key") or os.environ.get("EMERGENT_LLM_KEY")
+    encrypted_key = provider_config.get("encrypted_custom_api_key", "")
+    custom_key = provider_config.get("custom_api_key", "")
+    resolved_custom_key = decrypt_secret(encrypted_key) if encrypted_key else custom_key
+    api_key = resolved_custom_key or os.environ.get("EMERGENT_LLM_KEY")
 
     if provider in {"openai", "anthropic"}:
         if not api_key:
@@ -60,8 +65,7 @@ async def run_provider_analysis(
 
     if provider in {"openrouter", "minimax"}:
         base_url = provider_config.get("base_url", "").rstrip("/")
-        custom_key = provider_config.get("custom_api_key")
-        if not base_url or not custom_key:
+        if not base_url or not resolved_custom_key:
             raise RuntimeError(f"{provider.title()} requires a base URL and custom API key in Settings.")
 
         payload = {
@@ -78,7 +82,7 @@ async def run_provider_analysis(
             ],
             "temperature": 0.2,
         }
-        headers = {"Authorization": f"Bearer {custom_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {resolved_custom_key}", "Content-Type": "application/json"}
 
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(f"{base_url}/chat/completions", json=payload, headers=headers)

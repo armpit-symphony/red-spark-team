@@ -222,7 +222,7 @@ async def seed_database(db):
             "title": "Internal Control Plane Review",
             "executive_summary": "Passive review found policy clarity gaps and one medium-priority header hardening issue.",
             "markdown": "# Internal Control Plane Review\n\n## Scope Alignment\nPassive-only review confirmed.\n\n## Priority Risks\n- Medium: Weak CSP on admin shell\n- Low: Deep mode consent copy needs strengthening\n\n## Remediation Notes\nTighten CSP and reinforce consent copy before enabling deeper workflows.",
-            "review_status": "human-review-required",
+            "review_status": "pending_review",
             "created_at": seed_timestamp(1),
             "updated_at": seed_timestamp(1),
         }

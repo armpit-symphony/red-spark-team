@@ -58,3 +58,9 @@ class AnalysisRequest(BaseModel):
     model: str = Field(min_length=2, max_length=120)
     analysis_type: Literal["finding_summary", "report_draft", "remediation_plan"]
     focus: str = Field(default="", max_length=500)
+
+
+class ScannerImportRequest(BaseModel):
+    import_format: Literal["text", "json"]
+    source_name: str = Field(default="Scanner Import", min_length=2, max_length=120)
+    content: str = Field(min_length=2, max_length=120000)

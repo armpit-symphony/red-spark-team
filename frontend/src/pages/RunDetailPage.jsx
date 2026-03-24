@@ -18,6 +18,29 @@ const tabOptions = [
   { label: 'Report', value: 'report' },
 ];
 
+const initialImportDraft = {
+  source_name: 'Scanner Import',
+  import_format: 'text',
+  content: '',
+};
+
+const syncSectionDrafts = (sections) => sections.reduce((accumulator, section) => ({
+  ...accumulator,
+  [section.section_key]: { title: section.title, content: section.content, format: section.format },
+}), {});
+
+const downloadMarkdown = (filename, markdown) => {
+  const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 export default function RunDetailPage() {
   const { runId } = useParams();
   const [activeTab, setActiveTab] = useState('tasks');
@@ -25,6 +48,11 @@ export default function RunDetailPage() {
   const [providers, setProviders] = useState([]);
   const [analysisConfig, setAnalysisConfig] = useState({ provider: 'openai', model: 'gpt-5.2', analysis_type: 'report_draft', focus: '' });
   const [sectionDrafts, setSectionDrafts] = useState({});
+  const [importDraft, setImportDraft] = useState(initialImportDraft);
+  const [importSummary, setImportSummary] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [exportingAction, setExportingAction] = useState('');
 
   const loadBundle = useCallback(async () => {
     const [runData, providerData] = await Promise.all([api.get(`/runs/${runId}`), api.get('/providers')]);
@@ -34,12 +62,7 @@ export default function RunDetailPage() {
     if (firstProvider) {
       setAnalysisConfig((current) => ({ ...current, provider: firstProvider.provider, model: firstProvider.model }));
     }
-    setSectionDrafts(
-      runData.sections.reduce((accumulator, section) => ({
-        ...accumulator,
-        [section.section_key]: { title: section.title, content: section.content, format: section.format },
-      }), {})
-    );
+    setSectionDrafts(syncSectionDrafts(runData.sections));
   }, [runId]);
 
   useEffect(() => {
@@ -64,15 +87,64 @@ export default function RunDetailPage() {
     try {
       const updated = await api.post(`/runs/${runId}/analysis`, analysisConfig);
       setBundle(updated);
-      setSectionDrafts(
-        updated.sections.reduce((accumulator, section) => ({
-          ...accumulator,
-          [section.section_key]: { title: section.title, content: section.content, format: section.format },
-        }), {})
-      );
+      setSectionDrafts(syncSectionDrafts(updated.sections));
       toast.success('Analysis complete');
     } catch (error) {
       toast.error(error.message);
+    }
+  };
+
+  const importScannerOutput = async () => {
+    try {
+      setIsImporting(true);
+      const result = await api.post(`/runs/${runId}/scanner-import`, importDraft);
+      setBundle(result.bundle);
+      setSectionDrafts(syncSectionDrafts(result.bundle.sections));
+      setImportSummary(result.summary);
+      setImportDraft((current) => ({ ...current, content: '' }));
+      toast.success(`Imported ${result.summary.imported_count} finding(s)`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const approveReport = async () => {
+    if (!bundle.report) {
+      return;
+    }
+
+    try {
+      setIsApproving(true);
+      const approved = await api.post(`/reports/${bundle.report.id}/approve`, {});
+      setBundle((current) => ({ ...current, report: approved }));
+      toast.success('Report approved for export');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const exportReport = async (action) => {
+    if (!bundle.report) {
+      return;
+    }
+
+    try {
+      setExportingAction(action);
+      const exportPayload = await api.get(`/reports/${bundle.report.id}/export`);
+      if (action === 'copy') {
+        await copyToClipboard(exportPayload.markdown, 'Approved markdown copied');
+      } else {
+        downloadMarkdown(exportPayload.filename, exportPayload.markdown);
+        toast.success('Markdown download started');
+      }
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setExportingAction('');
     }
   };
 
@@ -129,15 +201,56 @@ export default function RunDetailPage() {
         ) : null}
 
         {activeTab === 'findings' ? (
-          <section className="grid-2" data-testid="run-detail-findings-view">
-            {bundle.findings.length ? bundle.findings.map((finding) => (
-              <article key={finding.id} className="panel" data-testid={`run-finding-${finding.id}`}>
-                <div className="panel-header"><h2 className="panel-title">{finding.title}</h2><StatusBadge value={finding.severity} tone="severity" testId={`run-finding-severity-${finding.id}`} /></div>
-                <p className="panel-copy" data-testid={`run-finding-evidence-${finding.id}`}>{finding.evidence}</p>
-                <div className="eyebrow">Remediation</div>
-                <p className="panel-copy" data-testid={`run-finding-remediation-${finding.id}`}>{finding.remediation}</p>
-              </article>
-            )) : <div className="empty-state" data-testid="run-detail-findings-empty-state">No findings have been promoted for this run yet. Save evidence sections or request an LLM summary to prepare the next review pass.</div>}
+          <section className="stack" data-testid="run-detail-findings-view">
+            <article className="form-shell" data-testid="scanner-import-panel">
+              <div className="panel-header">
+                <div>
+                  <div className="eyebrow">Scanner Import</div>
+                  <h2 className="panel-title">Import text or JSON into normalized findings</h2>
+                  <p className="panel-copy" data-testid="scanner-import-panel-copy">Paste scanner output here. Items without a title or severity are skipped automatically.</p>
+                </div>
+                <Button onClick={importScannerOutput} disabled={isImporting} variant="primary" data-testid="scanner-import-submit-button">
+                  {isImporting ? 'Importing…' : 'Import findings'}
+                </Button>
+              </div>
+              <div className="field-grid" style={{ marginTop: 16 }}>
+                <div className="field"><label className="field-label">Source name</label><Input value={importDraft.source_name} onChange={(event) => setImportDraft({ ...importDraft, source_name: event.target.value })} data-testid="scanner-import-source-input" /></div>
+                <div className="field"><label className="field-label">Format</label><select className="select" value={importDraft.import_format} onChange={(event) => setImportDraft({ ...importDraft, import_format: event.target.value })} data-testid="scanner-import-format-select"><option value="text">Text</option><option value="json">JSON</option></select></div>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Scanner output</label>
+                <Textarea value={importDraft.content} onChange={(event) => setImportDraft({ ...importDraft, content: event.target.value })} data-testid="scanner-import-content-textarea" />
+              </div>
+              {importSummary ? (
+                <div className="import-summary" data-testid="scanner-import-summary">
+                  <div className="button-row">
+                    <span className="badge" data-testid="scanner-import-imported-count">Imported {importSummary.imported_count}</span>
+                    <span className="badge" data-testid="scanner-import-skipped-count">Skipped {importSummary.skipped_count}</span>
+                    <span className="badge" data-testid="scanner-import-detected-count">Detected {importSummary.detected_count}</span>
+                  </div>
+                  {importSummary.skipped_items?.length ? (
+                    <div className="stack-sm" style={{ marginTop: 12 }}>
+                      {importSummary.skipped_items.map((item, index) => <div key={`${item}-${index}`} className="muted" data-testid={`scanner-import-skipped-item-${index}`}>{item}</div>)}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </article>
+
+            <section className="grid-2" data-testid="run-detail-findings-grid">
+              {bundle.findings.length ? bundle.findings.map((finding) => (
+                <article key={finding.id} className="panel" data-testid={`run-finding-${finding.id}`}>
+                  <div className="panel-header"><h2 className="panel-title">{finding.title}</h2><StatusBadge value={finding.severity} tone="severity" testId={`run-finding-severity-${finding.id}`} /></div>
+                  <div className="button-row" style={{ marginTop: 12 }}>
+                    <span className="badge" data-testid={`run-finding-status-${finding.id}`}>{finding.status}</span>
+                    {finding.source_name ? <span className="badge" data-testid={`run-finding-source-${finding.id}`}>{finding.source_name} · {finding.import_format || 'manual'}</span> : null}
+                  </div>
+                  <p className="panel-copy" data-testid={`run-finding-evidence-${finding.id}`}>{finding.evidence}</p>
+                  <div className="eyebrow">Remediation</div>
+                  <p className="panel-copy" data-testid={`run-finding-remediation-${finding.id}`}>{finding.remediation}</p>
+                </article>
+              )) : <div className="empty-state" data-testid="run-detail-findings-empty-state">No findings have been promoted for this run yet. Save evidence sections, import scanner results, or request an LLM summary to prepare the next review pass.</div>}
+            </section>
           </section>
         ) : null}
 
@@ -168,8 +281,22 @@ export default function RunDetailPage() {
         {activeTab === 'report' ? (
           <section className="stack" data-testid="run-detail-report-view">
             <article className="panel" data-testid="run-detail-report-panel">
-              <div className="panel-header"><div><div className="eyebrow">Draft markdown</div><h2 className="panel-title">Report output</h2></div></div>
-              <CopyBlock title="Report Draft" content={reportMarkdown} testId="run-detail-report-markdown" />
+              <div className="panel-header">
+                <div>
+                  <div className="eyebrow">Draft markdown</div>
+                  <h2 className="panel-title">Report output</h2>
+                  <p className="panel-copy" data-testid="run-detail-report-export-note">Human approval is required before markdown can be copied or downloaded.</p>
+                </div>
+                {bundle.report ? (
+                  <div className="button-row">
+                    <span className={`badge ${bundle.report.review_status === 'approved' ? 'badge--approved' : 'badge--review'}`} data-testid="run-detail-report-review-status">{bundle.report.review_status.replace('_', ' ')}</span>
+                    {bundle.report.review_status !== 'approved' ? <Button onClick={approveReport} disabled={isApproving} variant="primary" data-testid="run-detail-report-approve-button">{isApproving ? 'Approving…' : 'Approve export'}</Button> : null}
+                    <Button onClick={() => exportReport('copy')} disabled={!bundle.report.can_export || Boolean(exportingAction)} data-testid="run-detail-report-copy-approved-button">{exportingAction === 'copy' ? 'Copying…' : 'Copy approved markdown'}</Button>
+                    <Button onClick={() => exportReport('download')} disabled={!bundle.report.can_export || Boolean(exportingAction)} data-testid="run-detail-report-download-button">{exportingAction === 'download' ? 'Preparing…' : 'Download markdown'}</Button>
+                  </div>
+                ) : null}
+              </div>
+              <CopyBlock title="Report Draft" content={reportMarkdown} testId="run-detail-report-markdown" copyable={false} />
             </article>
           </section>
         ) : null}
