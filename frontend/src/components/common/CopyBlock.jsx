@@ -1,11 +1,11 @@
 import { toast } from 'sonner';
 
 import { Button } from '../ui/button';
+import { copyToClipboard } from '../../lib/clipboard';
 
 export const CopyBlock = ({ title, content, testId }) => {
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(content || '');
-    toast.success(`${title} copied`);
+    await copyToClipboard(content || '', `${title} copied`);
   };
 
   return (

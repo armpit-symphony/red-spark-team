@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 
+import { MeasuredChart } from '../components/common/MeasuredChart';
 import { MetricCard } from '../components/common/MetricCard';
 import { api } from '../lib/api';
 
@@ -13,15 +14,9 @@ const emptyOverview = {
 
 export default function OverviewPage() {
   const [overview, setOverview] = useState(emptyOverview);
-  const [chartsReady, setChartsReady] = useState(false);
 
   useEffect(() => {
     api.get('/overview').then(setOverview).catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setChartsReady(true), 150);
-    return () => window.clearTimeout(timer);
   }, []);
 
   return (
@@ -51,19 +46,17 @@ export default function OverviewPage() {
               <h2 className="panel-title">Severity distribution</h2>
             </div>
           </div>
-          <div className="chart-shell" data-testid="severity-chart-shell">
-            {chartsReady ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={300}>
-                <BarChart data={overview.severity_chart}>
-                  <CartesianGrid stroke="#27272A" vertical={false} />
-                  <XAxis dataKey="name" stroke="#A1A1AA" tickLine={false} axisLine={false} />
-                  <YAxis stroke="#A1A1AA" tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: '#111111', border: '1px solid #27272A' }} />
-                  <Bar dataKey="value" fill="#4F46E5" radius={0} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : null}
-          </div>
+          <MeasuredChart testId="severity-chart-shell">
+            {({ width, height }) => (
+              <BarChart width={width} height={height} data={overview.severity_chart}>
+                <CartesianGrid stroke="#27272A" vertical={false} />
+                <XAxis dataKey="name" stroke="#A1A1AA" tickLine={false} axisLine={false} />
+                <YAxis stroke="#A1A1AA" tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: '#111111', border: '1px solid #27272A' }} />
+                <Bar dataKey="value" fill="#4F46E5" radius={0} />
+              </BarChart>
+            )}
+          </MeasuredChart>
         </article>
 
         <article className="panel" data-testid="run-volume-chart-panel">
@@ -73,19 +66,17 @@ export default function OverviewPage() {
               <h2 className="panel-title">Run volume over time</h2>
             </div>
           </div>
-          <div className="chart-shell" data-testid="run-volume-chart-shell">
-            {chartsReady ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={300}>
-                <LineChart data={overview.run_volume_chart}>
-                  <CartesianGrid stroke="#27272A" vertical={false} />
-                  <XAxis dataKey="day" stroke="#A1A1AA" tickLine={false} axisLine={false} />
-                  <YAxis stroke="#A1A1AA" tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: '#111111', border: '1px solid #27272A' }} />
-                  <Line type="monotone" dataKey="runs" stroke="#F97316" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : null}
-          </div>
+          <MeasuredChart testId="run-volume-chart-shell">
+            {({ width, height }) => (
+              <LineChart width={width} height={height} data={overview.run_volume_chart}>
+                <CartesianGrid stroke="#27272A" vertical={false} />
+                <XAxis dataKey="day" stroke="#A1A1AA" tickLine={false} axisLine={false} />
+                <YAxis stroke="#A1A1AA" tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: '#111111', border: '1px solid #27272A' }} />
+                <Line type="monotone" dataKey="runs" stroke="#F97316" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            )}
+          </MeasuredChart>
         </article>
       </section>
 

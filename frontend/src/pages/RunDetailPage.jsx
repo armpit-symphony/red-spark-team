@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Tabs } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
+import { copyToClipboard } from '../lib/clipboard';
 import { api } from '../lib/api';
 
 const tabOptions = [
@@ -129,14 +130,14 @@ export default function RunDetailPage() {
 
         {activeTab === 'findings' ? (
           <section className="grid-2" data-testid="run-detail-findings-view">
-            {bundle.findings.map((finding) => (
+            {bundle.findings.length ? bundle.findings.map((finding) => (
               <article key={finding.id} className="panel" data-testid={`run-finding-${finding.id}`}>
                 <div className="panel-header"><h2 className="panel-title">{finding.title}</h2><StatusBadge value={finding.severity} tone="severity" testId={`run-finding-severity-${finding.id}`} /></div>
                 <p className="panel-copy" data-testid={`run-finding-evidence-${finding.id}`}>{finding.evidence}</p>
                 <div className="eyebrow">Remediation</div>
                 <p className="panel-copy" data-testid={`run-finding-remediation-${finding.id}`}>{finding.remediation}</p>
               </article>
-            ))}
+            )) : <div className="empty-state" data-testid="run-detail-findings-empty-state">No findings have been promoted for this run yet. Save evidence sections or request an LLM summary to prepare the next review pass.</div>}
           </section>
         ) : null}
 
@@ -151,7 +152,7 @@ export default function RunDetailPage() {
                   </div>
                   <div className="button-row">
                     <Button onClick={() => saveSection(section.section_key)} variant="primary" data-testid={`run-section-save-${section.section_key}`}>Save</Button>
-                    <Button onClick={() => navigator.clipboard.writeText(sectionDrafts[section.section_key]?.content || '')} data-testid={`run-section-copy-${section.section_key}`}>Copy</Button>
+                    <Button onClick={() => copyToClipboard(sectionDrafts[section.section_key]?.content || '', `${section.title} copied`)} data-testid={`run-section-copy-${section.section_key}`}>Copy</Button>
                   </div>
                 </div>
                 <Textarea
