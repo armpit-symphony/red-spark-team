@@ -1,60 +1,37 @@
 # PRD
 
 ## Original Problem Statement
-1. Next Priority — build all 3 below
-
-a) Encrypted custom provider key storage
-b) Scanner output import into normalized findings
-c) Human-review + export approval workflow
-
-2. Scanner Import Scope — Which formats should I support first if I do import next?
-
-Both text and JSON
-
-Copyable markdown only
-Downloadable markdown file
+Build main README professional for user. How to deploy, inputs, how to use and docs.
 
 ## User Choices
-- Export format: both copyable and downloadable markdown
-- Approval workflow: pending -> approved
-- Encrypted provider keys: store encrypted keys and allow update/delete
-- Import normalization: skip invalid items when required fields are missing
+- Deployment section: local setup + Docker + VM/server deployment
+- Audience: both users and developers
+- Tone: professional and detailed
 
 ## Architecture Decisions
-- Provider custom keys are encrypted at rest in MongoDB using Fernet before storage and never returned in API responses
-- Existing provider settings API was extended to support encrypted save/update and explicit key deletion
-- Scanner import was added at the run level so imported findings stay tied to a specific audit run and evidence context
-- Text and JSON imports use deterministic normalization rules with invalid entries skipped instead of blocking the full import
-- Report approval/export is enforced through backend-gated export endpoints so markdown copy/download only unlocks after approval
-- Frontend keeps draft preview visible while gating copy/download actions behind approval status
+- Kept the README as the single main documentation entrypoint for both operators and maintainers
+- Documented deployment in three practical layers: local, Docker pattern, and VM/server production setup
+- Included environment variables, API overview, accepted inputs, and step-by-step product usage so the README works as both onboarding and operations documentation
+- Avoided exposing real secrets while keeping config examples concrete and copy-friendly
 
 ## What’s Implemented
-- Encrypted provider key storage with save/update/delete support and provider readiness status updates
-- Startup migration for legacy plaintext provider keys and legacy report review statuses
-- Run-level scanner import endpoint for text and JSON input into normalized findings
-- Import summary with detected/imported/skipped counts and raw import excerpt appended into tool output evidence
-- Human review workflow for reports with pending_review -> approved transition
-- Approved report export endpoint returning markdown + filename for copy/download flows
-- Settings page updates for secure key messaging and key removal actions
-- Run Detail page import panel, import results, finding source badges, and report approval/export controls
-- Reports page approval controls and approved markdown copy/download actions
-- Regression coverage for provider storage, scanner import, and report approval/export workflows
+- Rewrote `/app/README.md` into a professional user-facing guide
+- Added sections for product overview, capabilities, workflows, inputs, environment variables, deployment, API overview, project structure, troubleshooting, and security notes
+- Documented how scanner import, provider key management, report approval, and markdown export work in product terms
+- Added local deployment instructions and practical Docker / VM deployment guidance for maintainers
 
 ## Prioritized Backlog
 ### P0
-- Replace derived encryption key material with a dedicated secret env var for stronger key rotation and compartmentalization
+- Add dedicated `docs/` pages for API examples and operational SOPs if documentation grows further
 
 ### P1
-- Add duplicate detection / merge strategy for repeated scanner imports
-- Support richer scanner JSON shapes and nested result structures
-- Add reviewer identity / approval notes metadata to report approvals
+- Add bundled Dockerfiles and compose assets to match the README’s Docker deployment guidance exactly
+- Add architecture diagrams and screenshots for onboarding
 
 ### P2
-- Add CSV/SARIF import support
-- Add finding-level review states and bulk approval actions
-- Add export history timeline and reviewer audit filters
+- Add changelog, release notes, and role-based admin/operator handbooks
 
 ## Next Tasks
-- Introduce dedicated encryption secret configuration and rotation path
-- Add duplicate import safeguards and clearer import conflict messaging
-- Expand report review metadata with approver notes and timestamps in the UI
+- Optionally add real Docker assets and production-ready deployment files
+- Expand docs with API request/response examples and troubleshooting screenshots
+- Add a docs section for backup, restore, and upgrade procedures
