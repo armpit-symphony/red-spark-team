@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: red-spark-team
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: your-registry/red-spark-team-backend:latest
+          ports:
+            - containerPort: 8001
+          env:
+            - name: MONGO_URL
+              value: mongodb://mongo:27017
+            - name: DB_NAME
+              value: red_spark_team
+            - name: EMERGENT_LLM_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: red-spark-team-secrets
+                  key: EMERGENT_LLM_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: red-spark-team
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8001
+      targetPort: 8001

@@ -18,10 +18,15 @@ It is designed for teams that need a clear, reviewable workflow rather than a lo
 8. [Local deployment](#local-deployment)
 9. [Docker deployment](#docker-deployment)
 10. [VM/server deployment](#vmserver-deployment)
-11. [API overview](#api-overview)
-12. [Project structure](#project-structure)
-13. [Troubleshooting](#troubleshooting)
-14. [Security notes](#security-notes)
+11. [Repository quick start](#repository-quick-start)
+12. [Run tests](#run-tests)
+13. [Deployment templates shipped in the repo](#deployment-templates-shipped-in-the-repo)
+14. [Current vs next architecture](#current-vs-next-architecture)
+15. [Remaining work](#remaining-work)
+16. [API overview](#api-overview)
+17. [Project structure](#project-structure)
+18. [Troubleshooting](#troubleshooting)
+19. [Security notes](#security-notes)
 
 ---
 
@@ -511,6 +516,165 @@ For production, terminate HTTPS using:
 - Let’s Encrypt + Certbot
 - your cloud load balancer
 - internal PKI if this is an internal-only deployment
+
+---
+
+## Repository quick start
+
+If you want the fastest best-effort way to clone and run the project from repo structure, use the flow below.
+
+### Clone the repo
+
+```bash
+git clone https://github.com/armpit-symphony/red-spark-team.git
+cd red-spark-team
+```
+
+### Backend
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+
+export MONGO_URL="mongodb://127.0.0.1:27017"
+export DB_NAME="red_spark_team"
+export EMERGENT_LLM_KEY="REPLACE_WITH_UNIVERSAL_KEY"
+
+cd backend
+uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+```
+
+Notes:
+- backend crypto and provider-key storage depend on `MONGO_URL` and `DB_NAME`
+- `EMERGENT_LLM_KEY` is used for supported universal-auth provider flows
+- the backend assumes `server.py` exposes the FastAPI app as `app`
+
+### Frontend
+
+```bash
+cd ../frontend
+yarn install
+yarn start
+```
+
+Notes:
+- the frontend dev proxy points to `http://127.0.0.1:8001/api`
+- keep the backend running on port `8001` unless you also update the proxy / API base config
+
+---
+
+## Run tests
+
+The backend test suite includes workflow coverage for provider key handling, scanner import normalization, and report approval/export.
+
+With the backend running on port `8001`, open another terminal and run:
+
+```bash
+cd backend
+export REACT_APP_BACKEND_URL="http://127.0.0.1:8001/api"
+pytest -q
+```
+
+The current tests expect `REACT_APP_BACKEND_URL` to be set.
+
+---
+
+## Deployment templates shipped in the repo
+
+The repository now includes self-hosting templates you can adapt directly:
+
+### Docker / Compose
+- `docker-compose.yml`
+- `backend/Dockerfile`
+- `frontend/Dockerfile`
+- `frontend/nginx.conf`
+
+### Kubernetes
+- `k8s/namespace.yaml`
+- `k8s/secret.yaml`
+- `k8s/mongo.yaml`
+- `k8s/backend.yaml`
+- `k8s/frontend.yaml`
+- `k8s/ingress.yaml`
+
+### Future-state config references
+- `configs/providers.yaml`
+- `configs/routing.yaml`
+
+Important:
+- the Docker and Kubernetes files are practical deployment templates
+- the `configs/providers.yaml` and `configs/routing.yaml` files are **reference templates for future-state architecture** and are **not yet wired into the live runtime**
+
+---
+
+## Current vs next architecture
+
+### Current platform shape
+
+```text
+User
+  -> Frontend (React)
+  -> Backend (FastAPI)
+  -> MongoDB
+  -> LLM provider(s)
+
+Core product flow:
+Create target / run
+  -> POST /targets, POST /runs
+Paste or import scanner output
+  -> POST /runs/{id}/scanner-import
+Normalize findings + store evidence
+Run analysis
+  -> POST /runs/{id}/analysis
+Approve report
+  -> POST /api/reports/{report_id}/approve
+Export approved markdown
+  -> GET /api/reports/{report_id}/export
+```
+
+### Next-state reference architecture
+
+```text
+Workspace UI
+  -> Targets / Runs / Evidence / Approvals
+
+Core API
+  -> Auth / RBAC / Policy Gates
+
+Model Router
+  -> Multi-provider routing and fallback layer
+
+Model Catalog
+  -> OpenRouter model enumeration / sync
+
+Tool Execution Plane
+  -> Sandboxed jobs (Semgrep, CodeQL, evidence ingestion)
+
+Observability
+  -> OTel collector and trace / cost backend
+
+State and secrets
+  -> Postgres + pgvector
+  -> Vault Transit / dedicated secrets system
+```
+
+This split helps keep the README honest about what exists today while still documenting where the platform is intended to grow.
+
+---
+
+## Remaining work
+
+The items below are still roadmap / hardening work rather than current delivered behavior:
+
+- add tenant isolation and auth / RBAC
+- replace permissive default CORS for production deployments
+- add model catalog ingestion and UI for broader provider coverage
+- add router-based model fallback / latency / cost policies
+- add real tool execution pipelines for scanner and code analysis jobs
+- adopt stronger production secrets handling such as Vault Transit or equivalent managed encryption
+- add OpenTelemetry instrumentation and optional LLM trace observability backend
+- consider Postgres + pgvector if semantic retrieval becomes a core feature
 
 ---
 

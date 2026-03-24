@@ -1,0 +1,26 @@
+# Template: future-state provider manifest for expanded multi-provider routing.
+# This file is not yet wired into the running application.
+
+providers:
+  - id: openai
+    type: openai_compatible
+    auth:
+      mode: vault_transit_envelope
+      vault:
+        key_name: llm-provider-keys
+        context: tenant/{{tenant_id}}/provider/openai
+    base_url: https://api.openai.com/v1
+    model_defaults:
+      chat: gpt-5.2
+
+  - id: openrouter
+    type: openai_compatible
+    auth:
+      mode: vault_transit_envelope
+      vault:
+        key_name: llm-provider-keys
+        context: tenant/{{tenant_id}}/provider/openrouter
+    base_url: https://openrouter.ai/api/v1
+    model_catalog:
+      source: openrouter_models_api
+      refresh_interval_seconds: 3600
