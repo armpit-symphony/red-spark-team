@@ -1,0 +1,115 @@
+{
+  "theme": "dark",
+  "typography": {
+    "headings": {
+      "family": "Chivo",
+      "weights": ["400", "700", "900"],
+      "usage": "Use tight letter spacing (tracking-tight). Capitalize section labels with tracking-[0.2em]."
+    },
+    "body": {
+      "family": "IBM Plex Sans",
+      "weights": ["400", "500", "600"],
+      "usage": "Use for all standard text, tables, and dense data."
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "weights": ["400", "500"],
+      "usage": "Critical for logs, evidence code blocks, findings IDs, and LLM raw outputs."
+    }
+  },
+  "colors": {
+    "background": "#050505",
+    "surface": "#111111",
+    "surface_glass": "rgba(17, 17, 17, 0.7)",
+    "border": "#27272A",
+    "text_primary": "#F4F4F5",
+    "text_secondary": "#A1A1AA",
+    "modes": {
+      "passive": {
+        "primary": "#4F46E5",
+        "bg": "rgba(79, 70, 229, 0.1)",
+        "border": "rgba(79, 70, 229, 0.3)"
+      },
+      "deep": {
+        "primary": "#DC2626",
+        "bg": "rgba(220, 38, 38, 0.1)",
+        "border": "rgba(220, 38, 38, 0.3)",
+        "warning": "#F59E0B"
+      }
+    },
+    "severity": {
+      "critical": "#DC2626",
+      "high": "#F97316",
+      "medium": "#EAB308",
+      "low": "#3B82F6"
+    }
+  },
+  "visual_enhancers": {
+    "surface_strategy": "Grid Borders (The 'Technical' Look). Use border-collapse style layouts or adjacent 1px borders (border-zinc-800) to create a skeletal, structural feel. Emphasize dense, precise data presentation over soft whitespace.",
+    "glassmorphism": "Use sparingly. Only for sticky headers or floating command palettes. bg-zinc-950/70 with backdrop-blur-xl and border-b border-zinc-800/50.",
+    "motion": "Minimalist and precise. Hover states should use immediate background color shifts or subtle 1px border highlights. No bouncy or playful animations. Status indicators (like 'scanning') should use a slow opacity pulse.",
+    "radii": "Sharp edges. Use rounded-none or max rounded-sm (2px/4px) for all components."
+  },
+  "grids_and_layouts": {
+    "spacing": "Dense but highly structured. Use p-4 to p-6 for card internals. Use gap-[1px] with a dark background to create 1px grid lines between items in bento layouts.",
+    "dashboard_grid": "Base grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-4. Hero metrics span 3, threat charts span 8, sidebars/feeds span 4.",
+    "sidebar_layout": "Fixed left sidebar w-64 with border-r border-zinc-800, right main content area with flex-1."
+  },
+  "components": {
+    "buttons": "Sharp edges (rounded-none or rounded-sm). Solid colors for primary actions, heavily utilizing the 'modes' colors (Indigo for passive, Red for deep). Outline/ghost for secondary. Always use Phosphor icons.",
+    "cards": "Flat, dark, bordered (border-zinc-800). No drop shadows. Use a slightly lighter background (bg-zinc-900/50) on hover.",
+    "tabs": "Underline style. border-b border-zinc-800 with active tab highlighted via a bottom border in the current mode's primary color. Text should shift from text-zinc-500 to text-white.",
+    "tables": "Dense, text-sm. Hover states on rows (hover:bg-zinc-900). Monospaced text for IDs, IPs, and timestamps.",
+    "code_blocks": "bg-black border border-zinc-800 p-4 rounded-none font-mono text-sm overflow-x-auto. MUST include a sticky top-right copy-to-clipboard button.",
+    "badges": "Small, uppercase, tracking-[0.2em], text-[10px] or text-xs. Used heavily for status (RUNNING, BLOCKED, COMPLETED) and modes (PASSIVE, DEEP)."
+  },
+  "pages": {
+    "overview": "Bento grid of high-level stats (Active Targets, Audits, Findings). Threat analysis charts (Recharts).",
+    "targets": "Registry table of targets with columns for URL, Type, Scope limits. Scope Policy badges dictate passive vs. deep mode allowed.",
+    "policies": "Toggle lists for rules. Visual warning section for deep mode authorization.",
+    "audit_runs": "List/Table of runs. Show progress bars for active runs and mode badges.",
+    "run_detail": "Complex view with Run meta info at top. Tabs: Tasks (orchestration workflow), Findings (list), Evidence (code/API blocks with copy), Report (Markdown output).",
+    "findings": "Searchable library of all findings. Badges for severity.",
+    "reports": "Markdown preview windows with export/copy actions.",
+    "settings": "Form inputs for LLM API keys and model selection.",
+    "audit_log": "Terminal-style chronological feed of admin actions using JetBrains Mono."
+  },
+  "accessibility": {
+    "contrast": "Ensure minimum 4.5:1 for text. Hover states must explicitly set background and text colors. Focus rings should use ring-1 ring-zinc-500 ring-offset-2 ring-offset-black.",
+    "data_testid": "Required on all interactive elements (e.g., data-testid='run-audit-btn', data-testid='copy-evidence-btn')."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "instructions": "Use Phosphor icons (Regular or Duotone weight) for a technical, precise look. Install via: yarn add @phosphor-icons/react"
+  },
+  "charts": {
+    "library": "recharts",
+    "instructions": "Use Recharts for vulnerability distribution and audit volume over time. Apply the severity colors to the charts. Remove grid lines or make them very faint (stroke='#27272A')."
+  },
+  "instructions_to_main_agent": [
+    "Build a persistent left sidebar layout wrapping all 9 specified pages.",
+    "Install and configure fonts: Chivo (headings), IBM Plex Sans (body), JetBrains Mono (mono).",
+    "Implement routing for: Overview, Targets, Policies, Audit Runs, Run Detail, Findings, Reports, Settings, Audit Log.",
+    "Use Shadcn UI components but heavily override them: remove large border radii (make them rounded-sm or rounded-none), remove soft shadows, use border-zinc-800.",
+    "Implement the Run Detail page with Shadcn Tabs for Tasks, Findings, Evidence, and Report. This is the core workspace.",
+    "Ensure all evidence, code blocks, and report outputs have obvious 'Copy' buttons (crucial for admin workflows).",
+    "Add visual gating (e.g., a striking dialog or stark warning banner) when switching a target or run to 'Deep Mode'. The UI must shift to use the 'Deep' mode colors (Red/Amber) to indicate elevated risk.",
+    "Use Recharts for the Overview dashboard charts.",
+    "Set dark mode as the default and only theme (force dark classes).",
+    "Use Phosphor icons exclusively."
+  ],
+  "universal_guidelines_for_main_agent": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid this. Create a highly technical, precise, and authoritative 'Red Team' feel.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy and crisp 1px borders.",
+    "You MUST NOT apply universal transition. Eg: transition: all.",
+    "You MUST NOT center align the app container.",
+    "Always use modern button styles (sharp/rounded-sm).",
+    "NEVER use emojis for icons.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Components MUST use named exports, Pages MUST use default exports.",
+    "Use sonner for toasts.",
+    "All interactive and key informational elements MUST include a data-testid attribute."
+  ]
+}
