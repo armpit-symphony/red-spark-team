@@ -80,6 +80,12 @@ This README is written for both:
 - Try the primary route first, then one fallback route
 - Show the primary and fallback error reasons if both routes fail
 
+### 2d) Routing telemetry and editable policies
+- Score routes using recent latency, cost hints, and fallback success history
+- Show routing telemetry in Run Detail using the last 25 routed analyses
+- Edit policy names, strategy goals, and primary/fallback routes from Settings
+- Keep direct/manual provider selection available alongside policy-driven routing
+
 ### 3) Scanner import and normalization
 - Import scanner output as **plain text** or **JSON**
 - Convert valid entries into normalized findings

@@ -50,6 +50,8 @@ export default function RunDetailPage() {
   const [sectionDrafts, setSectionDrafts] = useState({});
   const [openRouterCatalog, setOpenRouterCatalog] = useState({ models: [], model_count: 0, source: '', refresh_status: '' });
   const [routingState, setRoutingState] = useState({ default_policy_id: 'direct', policies: [] });
+  const [routingTelemetry, setRoutingTelemetry] = useState(null);
+  const [routingTelemetryLoading, setRoutingTelemetryLoading] = useState(false);
   const [importDraft, setImportDraft] = useState(initialImportDraft);
   const [importSummary, setImportSummary] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -77,6 +79,27 @@ export default function RunDetailPage() {
   const reportMarkdown = useMemo(() => bundle.report?.markdown || sectionDrafts['report-draft']?.content || 'No report draft yet.', [bundle.report, sectionDrafts]);
   const selectedRoutingPolicy = useMemo(() => routingState.policies.find((policy) => policy.id === analysisConfig.routing_policy_id) || null, [routingState, analysisConfig.routing_policy_id]);
 
+  const loadRoutingTelemetry = useCallback(async (policyId) => {
+    if (!policyId || policyId === 'direct') {
+      setRoutingTelemetry(null);
+      return;
+    }
+
+    try {
+      setRoutingTelemetryLoading(true);
+      const telemetry = await api.get(`/routing-policies/${policyId}/telemetry?window=25`);
+      setRoutingTelemetry(telemetry);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setRoutingTelemetryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRoutingTelemetry(analysisConfig.routing_policy_id);
+  }, [analysisConfig.routing_policy_id, loadRoutingTelemetry]);
+
   const saveSection = async (sectionKey) => {
     try {
       const draft = sectionDrafts[sectionKey];
@@ -93,6 +116,7 @@ export default function RunDetailPage() {
       const updated = await api.post(`/runs/${runId}/analysis`, analysisConfig);
       setBundle(updated);
       setSectionDrafts(syncSectionDrafts(updated.sections));
+      await loadRoutingTelemetry(analysisConfig.routing_policy_id);
       toast.success('Analysis complete');
     } catch (error) {
       toast.error(error.message);
@@ -186,11 +210,12 @@ export default function RunDetailPage() {
         </div>
         <div className="field-grid" style={{ marginTop: 16 }}>
           <div className="field"><label className="field-label">Routing policy</label><select className="select" value={analysisConfig.routing_policy_id} onChange={(e) => setAnalysisConfig({ ...analysisConfig, routing_policy_id: e.target.value })} data-testid="run-analysis-routing-policy-select"><option value="direct">Direct provider selection</option>{routingState.policies.map((policy) => <option key={policy.id} value={policy.id}>{policy.label}</option>)}</select></div>
-          {analysisConfig.routing_policy_id === 'direct' ? <div className="field"><label className="field-label">Provider</label><select className="select" value={analysisConfig.provider} onChange={(e) => { const selected = providers.find((provider) => provider.provider === e.target.value); setAnalysisConfig({ ...analysisConfig, provider: e.target.value, model: selected?.model || analysisConfig.model }); }} data-testid="run-analysis-provider-select">{providers.map((provider) => <option key={provider.provider} value={provider.provider}>{provider.label}</option>)}</select></div> : <div className="field"><label className="field-label">Primary route</label><div className="panel-copy" data-testid="run-analysis-primary-route">{selectedRoutingPolicy ? `${selectedRoutingPolicy.primary.provider} · ${selectedRoutingPolicy.primary.model}` : 'No routing policy selected'}</div></div>}
-          {analysisConfig.routing_policy_id === 'direct' ? <div className="field"><label className="field-label">Model</label>{analysisConfig.provider === 'openrouter' && openRouterCatalog.models.length ? <select className="select" value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-select">{openRouterCatalog.models.some((model) => model.model_id === analysisConfig.model) ? null : <option value={analysisConfig.model}>{analysisConfig.model}</option>}{openRouterCatalog.models.map((model) => <option key={model.model_id} value={model.model_id}>{model.name}</option>)}</select> : <Input value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-input" />}{analysisConfig.provider === 'openrouter' ? <div className="muted" style={{ marginTop: 8 }} data-testid="run-analysis-openrouter-catalog-meta">{openRouterCatalog.model_count || 0} catalog models · {openRouterCatalog.source || 'unknown source'}</div> : null}</div> : <div className="field"><label className="field-label">Fallback route</label><div className="panel-copy" data-testid="run-analysis-fallback-route">{selectedRoutingPolicy ? `${selectedRoutingPolicy.fallback.provider} · ${selectedRoutingPolicy.fallback.model}` : 'No fallback route configured'}</div><div className="muted" style={{ marginTop: 8 }} data-testid="run-analysis-routing-note">One fallback only. If both routes fail, the analysis error explains why.</div></div>}
+          {analysisConfig.routing_policy_id === 'direct' ? <div className="field"><label className="field-label">Provider</label><select className="select" value={analysisConfig.provider} onChange={(e) => { const selected = providers.find((provider) => provider.provider === e.target.value); setAnalysisConfig({ ...analysisConfig, provider: e.target.value, model: selected?.model || analysisConfig.model }); }} data-testid="run-analysis-provider-select">{providers.map((provider) => <option key={provider.provider} value={provider.provider}>{provider.label}</option>)}</select></div> : <div className="field"><label className="field-label">Preferred route</label><div className="panel-copy" data-testid="run-analysis-primary-route">{routingTelemetry?.preferred_route ? `${routingTelemetry.preferred_route.provider} · ${routingTelemetry.preferred_route.model}` : selectedRoutingPolicy ? `${selectedRoutingPolicy.primary.provider} · ${selectedRoutingPolicy.primary.model}` : 'No routing policy selected'}</div></div>}
+          {analysisConfig.routing_policy_id === 'direct' ? <div className="field"><label className="field-label">Model</label>{analysisConfig.provider === 'openrouter' && openRouterCatalog.models.length ? <select className="select" value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-select">{openRouterCatalog.models.some((model) => model.model_id === analysisConfig.model) ? null : <option value={analysisConfig.model}>{analysisConfig.model}</option>}{openRouterCatalog.models.map((model) => <option key={model.model_id} value={model.model_id}>{model.name}</option>)}</select> : <Input value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-input" />}{analysisConfig.provider === 'openrouter' ? <div className="muted" style={{ marginTop: 8 }} data-testid="run-analysis-openrouter-catalog-meta">{openRouterCatalog.model_count || 0} catalog models · {openRouterCatalog.source || 'unknown source'}</div> : null}</div> : <div className="field"><label className="field-label">Backup route</label><div className="panel-copy" data-testid="run-analysis-fallback-route">{routingTelemetry?.backup_route ? `${routingTelemetry.backup_route.provider} · ${routingTelemetry.backup_route.model}` : selectedRoutingPolicy ? `${selectedRoutingPolicy.fallback.provider} · ${selectedRoutingPolicy.fallback.model}` : 'No fallback route configured'}</div><div className="muted" style={{ marginTop: 8 }} data-testid="run-analysis-routing-note">One fallback only. If both routes fail, the analysis error explains why.</div></div>}
           <div className="field"><label className="field-label">Output type</label><select className="select" value={analysisConfig.analysis_type} onChange={(e) => setAnalysisConfig({ ...analysisConfig, analysis_type: e.target.value })} data-testid="run-analysis-type-select"><option value="report_draft">Report draft</option><option value="finding_summary">Finding summary</option><option value="remediation_plan">Remediation plan</option></select></div>
           <div className="field"><label className="field-label">Focus</label><Input value={analysisConfig.focus} onChange={(e) => setAnalysisConfig({ ...analysisConfig, focus: e.target.value })} data-testid="run-analysis-focus-input" /></div>
         </div>
+        {analysisConfig.routing_policy_id !== 'direct' ? <div className="stack" style={{ marginTop: 16 }} data-testid="run-analysis-routing-telemetry-panel"><div className="panel-header"><div><div className="eyebrow">Routing telemetry</div><h3 className="panel-title">Last 25 routed analyses for this policy</h3></div>{routingTelemetryLoading ? <span className="badge" data-testid="run-analysis-routing-telemetry-loading">loading</span> : null}</div>{routingTelemetry ? <><div className="grid-2"><article className="panel" data-testid="run-analysis-routing-preferred-card"><div className="eyebrow">Preferred score</div><div className="panel-title">{routingTelemetry.preferred_route.provider} · {routingTelemetry.preferred_route.model}</div><div className="stack-sm" style={{ marginTop: 12 }}><div className="muted" data-testid="run-analysis-routing-preferred-success">Success rate: {Math.round((routingTelemetry.preferred_route.success_rate || 0) * 100)}%</div><div className="muted" data-testid="run-analysis-routing-preferred-latency">Avg latency: {routingTelemetry.preferred_route.avg_latency_ms} ms</div><div className="muted" data-testid="run-analysis-routing-preferred-cost">Cost score: {routingTelemetry.preferred_route.cost_units}</div></div></article><article className="panel" data-testid="run-analysis-routing-backup-card"><div className="eyebrow">Backup score</div><div className="panel-title">{routingTelemetry.backup_route.provider} · {routingTelemetry.backup_route.model}</div><div className="stack-sm" style={{ marginTop: 12 }}><div className="muted" data-testid="run-analysis-routing-backup-success">Success rate: {Math.round((routingTelemetry.backup_route.success_rate || 0) * 100)}%</div><div className="muted" data-testid="run-analysis-routing-backup-latency">Avg latency: {routingTelemetry.backup_route.avg_latency_ms} ms</div><div className="muted" data-testid="run-analysis-routing-backup-cost">Cost score: {routingTelemetry.backup_route.cost_units}</div></div></article></div><div className="stack-sm" style={{ marginTop: 16 }}>{routingTelemetry.recent_traces.slice(0, 6).map((trace) => <div key={trace.id} className="panel" data-testid={`run-analysis-routing-trace-${trace.id}`}><div className="panel-header"><div className="panel-title">{trace.selected_provider} · {trace.selected_model}</div><span className="badge" data-testid={`run-analysis-routing-trace-status-${trace.id}`}>{trace.success ? 'success' : 'failed'}</span></div><div className="muted" data-testid={`run-analysis-routing-trace-meta-${trace.id}`}>{trace.latency_ms} ms · {trace.used_as_fallback ? 'fallback attempt' : 'preferred attempt'}</div>{trace.error_message ? <div className="muted" data-testid={`run-analysis-routing-trace-error-${trace.id}`}>{trace.error_message}</div> : null}</div>)}</div></> : <div className="muted" data-testid="run-analysis-routing-telemetry-empty">No routing telemetry yet for this policy.</div>}</div> : null}
       </section>
 
       <Tabs tabs={tabOptions} activeTab={activeTab} onChange={setActiveTab}>

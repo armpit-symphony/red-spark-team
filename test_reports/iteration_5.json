@@ -1,0 +1,48 @@
+{
+  "summary": "Completed Priority C continuation validation across backend and frontend: editable routing policies in Settings, Run Detail telemetry with last-25 window summaries, routing policy persistence, direct/manual routing regression, one-fallback error-path behavior, and Priority B catalog/import regression.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/routing-policies/{policy_id}",
+        "issue": "Policy update accepts identical primary and fallback routes (same provider/model), which weakens one-fallback resilience intent.",
+        "priority": "HIGH"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_priority_c_policy_edit_window_regression.py",
+    "/app/backend/tests/test_priority_c_routing_management.py",
+    "/app/backend/tests/test_priority_c_routing_policies.py",
+    "/app/backend/tests/test_priority_c_direct_mode_regression.py",
+    "/app/backend/tests/test_priority_b_model_catalog_and_regression.py",
+    "/app/test_reports/pytest/pytest_results_iteration5.xml",
+    "/app/test_reports/pytest/pytest_results_iteration5_policy_window.xml"
+  ],
+  "action_items": [
+    "Add server-side validation in RoutingPolicyUpdate flow to reject same primary/fallback provider+model combinations.",
+    "Optionally add explicit test coverage for successful fallback execution trace path (used_fallback=true) under controlled provider simulation."
+  ],
+  "critical_code_review_comments": [
+    "update_routing_policy currently enforces allowed provider enums but does not enforce route diversity (primary != fallback), enabling ineffective fallback policies.",
+    "Routing policy updates currently overwrite seeded policy source to 'user'; if preserving config provenance matters, keep a separate immutable source flag or revision history."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_priority_c_policy_edit_window_regression.py",
+    "/app/test_reports/iteration_5.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "95%"
+  },
+  "seed_data_creation": "Created TEST_UI_Routing_Iter5_B target/run via public API for Run Detail telemetry UI validation.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Primary Priority C flows passed on preview URL. One transient Playwright assertion failed on text visibility, but subsequent Settings persistence and Run Detail telemetry checks passed. Ensure routing policy values are reset before future tests if modified in UI scripts.",
+  "rca of the issue": "Reproduced validation gap by sending PUT /api/routing-policies/reliable-default with primary=openai:gpt-5.2 and fallback=openai:gpt-5.2; API returned 200 and persisted. Root cause: missing cross-field validation in RoutingPolicyUpdate endpoint/model. Mitigation: add explicit constraint rejecting identical primary/fallback pair with HTTP 400 and regression test."
+}

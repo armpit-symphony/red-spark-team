@@ -73,3 +73,12 @@ class ModelCatalogRefreshRequest(BaseModel):
 
 class RoutingDefaultUpdate(BaseModel):
     default_policy_id: str = Field(min_length=2, max_length=120)
+
+
+class RoutingPolicyUpdate(BaseModel):
+    label: str = Field(min_length=2, max_length=120)
+    goal: Literal["reliability_first", "latency_first", "cost_first", "balanced"]
+    primary_provider: Literal["openai", "anthropic", "openrouter", "minimax"]
+    primary_model: str = Field(min_length=2, max_length=120)
+    fallback_provider: Literal["openai", "anthropic", "openrouter", "minimax"]
+    fallback_model: str = Field(min_length=2, max_length=120)
