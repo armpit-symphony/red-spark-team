@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="285.806" timestamp="2026-03-25T03:29:46.474079+00:00" hostname="agent-env-85360e73-2232-47e9-aa51-010212065fe1"><testcase classname="backend.tests.test_priority_d_agent_workflow_runtime" name="test_agent_workflow_post_then_get_returns_completed_steps_with_handoffs_and_route_trace" time="246.756"><failure message="AssertionError: API call failed after retries for POST /runs/2baffd1a-8927-4dc9-9b8c-55e043045fa5/agent-workflow: Transient upstream status 502">backend/tests/test_priority_d_agent_workflow_runtime.py:97: in test_agent_workflow_post_then_get_returns_completed_steps_with_handoffs_and_route_trace
+    post_response = api_call_with_retry(api_client, "POST", f"/runs/{run_id}/agent-workflow", json=workflow_payload, timeout=180)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_priority_d_agent_workflow_runtime.py:42: in api_call_with_retry
+    raise AssertionError(f"API call failed after retries for {method} {path}: {last_error}")
+E   AssertionError: API call failed after retries for POST /runs/2baffd1a-8927-4dc9-9b8c-55e043045fa5/agent-workflow: Transient upstream status 502</failure></testcase><testcase classname="backend.tests.test_priority_d_agent_workflow_runtime" name="test_agent_workflow_current_run_memory_does_not_leak_other_run_objective_markers" time="38.965"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">backend/tests/test_priority_d_agent_workflow_runtime.py:160: in test_agent_workflow_current_run_memory_does_not_leak_other_run_objective_markers
+    assert post_response.status_code == 200
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase></testsuite></testsuites>

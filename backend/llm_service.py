@@ -33,13 +33,7 @@ def build_analysis_prompt(run_record: dict[str, Any], sections: list[dict[str, A
     )
 
 
-async def run_provider_analysis(
-    provider_config: dict[str, Any],
-    run_record: dict[str, Any],
-    sections: list[dict[str, Any]],
-    analysis_type: str,
-    focus: str,
-) -> str:
+async def run_prompt_analysis(provider_config: dict[str, Any], session_id: str, prompt: str, system_message: str) -> str:
     provider = provider_config["provider"]
     model = provider_config["model"]
     encrypted_key = provider_config.get("encrypted_custom_api_key", "")
@@ -53,14 +47,11 @@ async def run_provider_analysis(
 
         chat = LlmChat(
             api_key=api_key,
-            session_id=f"audit-{run_record['id']}-{analysis_type}",
-            system_message=(
-                "You summarize authorized internal security review data. "
-                "Stay defensive and governance-focused."
-            ),
+            session_id=session_id,
+            system_message=system_message,
         ).with_model(provider, model)
 
-        response = await chat.send_message(UserMessage(text=build_analysis_prompt(run_record, sections, analysis_type, focus)))
+        response = await chat.send_message(UserMessage(text=prompt))
         return response.strip()
 
     if provider in {"openrouter", "minimax"}:
@@ -73,11 +64,11 @@ async def run_provider_analysis(
             "messages": [
                 {
                     "role": "system",
-                    "content": "You summarize authorized internal security review data. Stay defensive and governance-focused.",
+                    "content": system_message,
                 },
                 {
                     "role": "user",
-                    "content": build_analysis_prompt(run_record, sections, analysis_type, focus),
+                    "content": prompt,
                 },
             ],
             "temperature": 0.2,
@@ -91,3 +82,18 @@ async def run_provider_analysis(
             return data["choices"][0]["message"]["content"].strip()
 
     raise RuntimeError(f"Unsupported provider: {provider}")
+
+
+async def run_provider_analysis(
+    provider_config: dict[str, Any],
+    run_record: dict[str, Any],
+    sections: list[dict[str, Any]],
+    analysis_type: str,
+    focus: str,
+) -> str:
+    return await run_prompt_analysis(
+        provider_config,
+        f"audit-{run_record['id']}-{analysis_type}",
+        build_analysis_prompt(run_record, sections, analysis_type, focus),
+        "You summarize authorized internal security review data. Stay defensive and governance-focused.",
+    )

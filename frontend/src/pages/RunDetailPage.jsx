@@ -15,6 +15,7 @@ const tabOptions = [
   { label: 'Tasks', value: 'tasks' },
   { label: 'Findings', value: 'findings' },
   { label: 'Evidence', value: 'evidence' },
+  { label: 'Agents', value: 'agents' },
   { label: 'Report', value: 'report' },
 ];
 
@@ -52,18 +53,21 @@ export default function RunDetailPage() {
   const [routingState, setRoutingState] = useState({ default_policy_id: 'direct', policies: [] });
   const [routingTelemetry, setRoutingTelemetry] = useState(null);
   const [routingTelemetryLoading, setRoutingTelemetryLoading] = useState(false);
+  const [agentWorkflow, setAgentWorkflow] = useState({ workflow: null, steps: [] });
   const [importDraft, setImportDraft] = useState(initialImportDraft);
   const [importSummary, setImportSummary] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [exportingAction, setExportingAction] = useState('');
+  const [isRunningAgents, setIsRunningAgents] = useState(false);
 
   const loadBundle = useCallback(async () => {
-    const [runData, providerData, catalogData, routingData] = await Promise.all([api.get(`/runs/${runId}`), api.get('/providers'), api.get('/model-catalog?provider=openrouter'), api.get('/routing-policies')]);
+    const [runData, providerData, catalogData, routingData, agentData] = await Promise.all([api.get(`/runs/${runId}`), api.get('/providers'), api.get('/model-catalog?provider=openrouter'), api.get('/routing-policies'), api.get(`/runs/${runId}/agent-workflow`)]);
     setBundle(runData);
     setProviders(providerData.filter((provider) => provider.enabled));
     setOpenRouterCatalog(catalogData);
     setRoutingState(routingData);
+    setAgentWorkflow(agentData);
     const firstProvider = providerData.find((provider) => provider.enabled);
     if (firstProvider) {
       setAnalysisConfig((current) => ({ ...current, provider: firstProvider.provider, model: firstProvider.model, routing_policy_id: routingData.default_policy_id || current.routing_policy_id }));
@@ -136,6 +140,26 @@ export default function RunDetailPage() {
       toast.error(error.message);
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const runAgentWorkflow = async () => {
+    try {
+      setIsRunningAgents(true);
+      const result = await api.post(`/runs/${runId}/agent-workflow`, {
+        provider: analysisConfig.provider,
+        model: analysisConfig.model,
+        routing_policy_id: analysisConfig.routing_policy_id,
+        focus: analysisConfig.focus,
+      });
+      setAgentWorkflow(result);
+      await loadBundle();
+      await loadRoutingTelemetry(analysisConfig.routing_policy_id);
+      toast.success('Multi-agent workflow complete');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setIsRunningAgents(false);
     }
   };
 
@@ -306,6 +330,60 @@ export default function RunDetailPage() {
                 />
               </article>
             ))}
+          </section>
+        ) : null}
+
+        {activeTab === 'agents' ? (
+          <section className="stack" data-testid="run-detail-agents-view">
+            <article className="panel" data-testid="agent-workflow-control-panel">
+              <div className="panel-header">
+                <div>
+                  <div className="eyebrow">Multi-agent runtime</div>
+                  <h2 className="panel-title">Planner, Evidence Normalizer, Risk Reviewer, Reporter</h2>
+                  <p className="panel-copy" data-testid="agent-workflow-control-copy">Runs the planner first, then Evidence Normalizer and Risk Reviewer in parallel, then hands both into the Reporter. Memory is limited to the current run only.</p>
+                </div>
+                <Button onClick={runAgentWorkflow} disabled={isRunningAgents} data-testid="agent-workflow-run-button">
+                  {isRunningAgents ? 'Running…' : 'Run multi-agent workflow'}
+                </Button>
+              </div>
+              <div className="field-grid" style={{ marginTop: 16 }}>
+                <div className="field"><label className="field-label">Execution mode</label><div className="panel-copy" data-testid="agent-workflow-mode">Parallel where possible with handoff tracking</div></div>
+                <div className="field"><label className="field-label">Route selection</label><div className="panel-copy" data-testid="agent-workflow-route-selection">{analysisConfig.routing_policy_id === 'direct' ? `${analysisConfig.provider} · ${analysisConfig.model}` : selectedRoutingPolicy ? selectedRoutingPolicy.label : analysisConfig.routing_policy_id}</div></div>
+              </div>
+            </article>
+
+            {agentWorkflow.workflow ? (
+              <>
+                <article className="panel" data-testid="agent-workflow-summary-panel">
+                  <div className="panel-header">
+                    <div>
+                      <div className="eyebrow">Latest workflow</div>
+                      <h3 className="panel-title">{agentWorkflow.workflow.status.replace('_', ' ')}</h3>
+                    </div>
+                    <span className={`badge ${agentWorkflow.workflow.status === 'completed' ? 'badge--approved' : 'badge--review'}`} data-testid="agent-workflow-status">{agentWorkflow.workflow.status}</span>
+                  </div>
+                  {agentWorkflow.workflow.error ? <div className="muted" data-testid="agent-workflow-error">{agentWorkflow.workflow.error}</div> : null}
+                </article>
+
+                <section className="grid-2" data-testid="agent-workflow-steps-grid">
+                  {agentWorkflow.steps.map((step) => (
+                    <article key={step.id} className="panel" data-testid={`agent-step-${step.agent_key}`}>
+                      <div className="panel-header">
+                        <div>
+                          <div className="eyebrow">Depends on: {step.depends_on?.length ? step.depends_on.join(', ') : 'none'}</div>
+                          <h3 className="panel-title">{step.label}</h3>
+                        </div>
+                        <span className="badge" data-testid={`agent-step-status-${step.agent_key}`}>{step.status}</span>
+                      </div>
+                      {step.route_trace ? <div className="muted" data-testid={`agent-step-route-${step.agent_key}`}>{step.route_trace.selected_provider} · {step.route_trace.selected_model}{step.route_trace.used_fallback ? ' · fallback used' : ''}</div> : null}
+                      {step.handoff_summary ? <div className="muted" data-testid={`agent-step-handoff-${step.agent_key}`}>{step.handoff_summary}</div> : null}
+                      {step.error ? <div className="muted" data-testid={`agent-step-error-${step.agent_key}`}>{step.error}</div> : null}
+                      {step.output ? <CopyBlock title={step.label} content={step.output} testId={`agent-step-output-${step.agent_key}`} /> : null}
+                    </article>
+                  ))}
+                </section>
+              </>
+            ) : <div className="empty-state" data-testid="agent-workflow-empty-state">No multi-agent workflow has run for this audit yet. Launch one from this tab to generate agent outputs and tracked handoffs.</div>}
           </section>
         ) : null}
 

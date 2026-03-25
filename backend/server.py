@@ -1,3 +1,4 @@
+import asyncio
 from collections import Counter
 import json
 import re
@@ -8,10 +9,11 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from agent_runtime_service import AGENT_ORDER, build_agent_prompt, handoff_summary
 from database import clean_document, database
-from llm_service import run_provider_analysis
+from llm_service import run_prompt_analysis, run_provider_analysis
 from model_catalog_service import refresh_openrouter_catalog
-from models import AnalysisRequest, ModelCatalogRefreshRequest, PolicyUpdate, ProviderUpdate, RoutingDefaultUpdate, RoutingPolicyUpdate, RunCreate, ScannerImportRequest, SectionUpsert, TargetCreate, now_iso
+from models import AgentWorkflowRequest, AnalysisRequest, ModelCatalogRefreshRequest, PolicyUpdate, ProviderUpdate, RoutingDefaultUpdate, RoutingPolicyUpdate, RunCreate, ScannerImportRequest, SectionUpsert, TargetCreate, now_iso
 from routing_service import ROUTING_MEMORY_WINDOW, get_policy_telemetry, get_routing_state, sync_routing_policies
 from security_utils import encrypt_secret
 from seed import seed_database
@@ -371,6 +373,122 @@ async def get_run_bundle(run_id: str):
     return {"run": run_record, "tasks": tasks, "findings": findings, "sections": sections, "report": report}
 
 
+async def get_latest_agent_workflow(run_id: str):
+    workflows = [clean_document(item) async for item in database.agent_workflows.find({"audit_run_id": run_id}, {"_id": 0}).sort("created_at", -1).limit(1)]
+    workflow = workflows[0] if workflows else None
+    if not workflow:
+        return {"workflow": None, "steps": []}
+
+    steps = [clean_document(item) async for item in database.agent_steps.find({"workflow_id": workflow["id"]}, {"_id": 0}).sort("created_at", 1)]
+    return {"workflow": workflow, "steps": steps}
+
+
+async def upsert_agent_artifact(run_id: str, section_key: str, title: str, content: str):
+    await database.artifacts.update_one(
+        {"audit_run_id": run_id, "section_key": section_key},
+        {
+            "$set": {
+                "id": str(uuid4()),
+                "audit_run_id": run_id,
+                "section_key": section_key,
+                "title": title,
+                "content": content,
+                "format": "markdown",
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }
+        },
+        upsert=True,
+    )
+
+
+async def execute_agent_prompt_with_routing(run_id: str, bundle: dict[str, Any], payload: AgentWorkflowRequest, agent_key: str, prompt: str):
+    async def run_candidate(provider_name: str, model_name: str):
+        provider_record = clean_document(await database.providers.find_one({"provider": provider_name}, {"_id": 0}))
+        if not provider_record:
+            raise RuntimeError(f"Provider {provider_name} is not configured.")
+        if not provider_record.get("enabled"):
+            raise RuntimeError(f"Provider {provider_name} is disabled in settings.")
+
+        provider_record["model"] = model_name
+        return await run_prompt_analysis(
+            provider_record,
+            f"agent-{run_id}-{agent_key}-{provider_name}",
+            prompt,
+            "You are operating inside a governed internal multi-agent audit runtime. Stay defensive, concise, and review-focused.",
+        )
+
+    async def record_trace(candidate: dict[str, str], route_rank: int, success: bool, latency_ms: float, error_message: str, policy_id: str, policy_label: str, strategy_goal: str):
+        await database.routing_traces.insert_one(
+            {
+                "id": str(uuid4()),
+                "audit_run_id": run_id,
+                "routing_policy_id": policy_id,
+                "route_mode": "agent_workflow",
+                "policy_label": policy_label,
+                "strategy_goal": strategy_goal,
+                "selected_provider": candidate["provider"],
+                "selected_model": candidate["model"],
+                "route_rank": route_rank,
+                "used_as_fallback": route_rank > 1,
+                "success": success,
+                "latency_ms": round(latency_ms, 2),
+                "analysis_type": agent_key,
+                "focus": payload.focus,
+                "error_message": error_message,
+                "created_at": now_iso(),
+            }
+        )
+
+    route_trace = {
+        "mode": "direct",
+        "routing_policy_id": "direct",
+        "policy_label": "Direct selection",
+        "selected_provider": payload.provider,
+        "selected_model": payload.model,
+        "used_fallback": False,
+        "fallback_reason": "",
+    }
+
+    if payload.routing_policy_id != "direct":
+        routing_policy = clean_document(await database.routing_policies.find_one({"id": payload.routing_policy_id}, {"_id": 0}))
+        if not routing_policy:
+            raise HTTPException(status_code=404, detail="Routing policy not found.")
+        telemetry = await get_policy_telemetry(database, routing_policy["id"], ROUTING_MEMORY_WINDOW)
+        preferred = {"provider": telemetry["preferred_route"]["provider"], "model": telemetry["preferred_route"]["model"]}
+        backup = {"provider": telemetry["backup_route"]["provider"], "model": telemetry["backup_route"]["model"]}
+
+        try:
+            started = time.perf_counter()
+            content = await run_candidate(preferred["provider"], preferred["model"])
+            await record_trace(preferred, 1, True, (time.perf_counter() - started) * 1000, "", routing_policy["id"], routing_policy["label"], routing_policy["goal"])
+            route_trace = {**route_trace, "mode": "routing_policy", "routing_policy_id": routing_policy["id"], "policy_label": routing_policy["label"], "selected_provider": preferred["provider"], "selected_model": preferred["model"]}
+            return content, route_trace
+        except Exception as exc:  # noqa: BLE001
+            primary_error = str(exc)
+            await record_trace(preferred, 1, False, (time.perf_counter() - started) * 1000, primary_error, routing_policy["id"], routing_policy["label"], routing_policy["goal"])
+            try:
+                started = time.perf_counter()
+                content = await run_candidate(backup["provider"], backup["model"])
+                await record_trace(backup, 2, True, (time.perf_counter() - started) * 1000, "", routing_policy["id"], routing_policy["label"], routing_policy["goal"])
+                route_trace = {**route_trace, "mode": "routing_policy", "routing_policy_id": routing_policy["id"], "policy_label": routing_policy["label"], "selected_provider": backup["provider"], "selected_model": backup["model"], "used_fallback": True, "fallback_reason": primary_error}
+                return content, route_trace
+            except Exception as fallback_exc:  # noqa: BLE001
+                await record_trace(backup, 2, False, (time.perf_counter() - started) * 1000, str(fallback_exc), routing_policy["id"], routing_policy["label"], routing_policy["goal"])
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Agent route failed for {agent_key}. Primary route {preferred['provider']}:{preferred['model']} error: {primary_error}. "
+                        f"Fallback route {backup['provider']}:{backup['model']} error: {fallback_exc}"
+                    ),
+                ) from fallback_exc
+
+    started = time.perf_counter()
+    content = await run_candidate(payload.provider, payload.model)
+    await record_trace({"provider": payload.provider, "model": payload.model}, 1, True, (time.perf_counter() - started) * 1000, "", "direct", "Direct selection", "direct")
+    return content, route_trace
+
+
 @app.on_event("startup")
 async def startup_event():
     await seed_database(database)
@@ -669,6 +787,121 @@ async def create_run(payload: RunCreate):
 @app.get("/api/runs/{run_id}")
 async def get_run_detail(run_id: str):
     return await get_run_bundle(run_id)
+
+
+@app.get("/api/runs/{run_id}/agent-workflow")
+async def get_run_agent_workflow(run_id: str):
+    existing = clean_document(await database.runs.find_one({"id": run_id}, {"_id": 0}))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return await get_latest_agent_workflow(run_id)
+
+
+@app.post("/api/runs/{run_id}/agent-workflow")
+async def run_agent_workflow(run_id: str, payload: AgentWorkflowRequest):
+    bundle = await get_run_bundle(run_id)
+    workflow_id = str(uuid4())
+    workflow = {
+        "id": workflow_id,
+        "audit_run_id": run_id,
+        "status": "running",
+        "provider": payload.provider,
+        "model": payload.model,
+        "routing_policy_id": payload.routing_policy_id,
+        "focus": payload.focus,
+        "parallel_groups": [["planner"], ["evidence_normalizer", "risk_reviewer"], ["reporter"]],
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await database.agent_workflows.insert_one(workflow)
+
+    step_documents = [
+        {
+            "id": str(uuid4()),
+            "workflow_id": workflow_id,
+            "audit_run_id": run_id,
+            "agent_key": step["key"],
+            "label": step["label"],
+            "depends_on": step["depends_on"],
+            "status": "queued",
+            "output": "",
+            "error": "",
+            "handoff_summary": "",
+            "route_trace": None,
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        for step in AGENT_ORDER
+    ]
+    await database.agent_steps.insert_many(step_documents)
+
+    async def update_step(agent_key: str, **fields):
+        await database.agent_steps.update_one(
+            {"workflow_id": workflow_id, "agent_key": agent_key},
+            {"$set": {**fields, "updated_at": now_iso()}},
+        )
+
+    outputs: dict[str, str] = {}
+
+    async def execute_step(agent_key: str):
+        prompt = build_agent_prompt(agent_key, bundle, outputs, payload.focus)
+        await update_step(agent_key, status="running", started_at=now_iso())
+        try:
+            content, route_trace = await execute_agent_prompt_with_routing(run_id, bundle, payload, agent_key, prompt)
+            outputs[agent_key] = content
+            title_map = {
+                "planner": "Agent Plan",
+                "evidence_normalizer": "Normalized Evidence",
+                "risk_reviewer": "Risk Review",
+                "reporter": "Report Draft",
+            }
+            section_key = next(item["section_key"] for item in AGENT_ORDER if item["key"] == agent_key)
+            await upsert_agent_artifact(run_id, section_key, title_map[agent_key], content)
+            await update_step(agent_key, status="completed", completed_at=now_iso(), output=content, handoff_summary=handoff_summary(agent_key), route_trace=route_trace)
+            return content, route_trace
+        except Exception as exc:  # noqa: BLE001
+            await update_step(agent_key, status="failed", completed_at=now_iso(), error=str(exc))
+            raise
+
+    try:
+        planner_output, _ = await execute_step("planner")
+        await database.tasks.update_one({"audit_run_id": run_id, "task_type": "planner"}, {"$set": {"status": "completed", "output": planner_output[:220]}})
+
+        parallel_results = await asyncio.gather(execute_step("evidence_normalizer"), execute_step("risk_reviewer"), return_exceptions=True)
+        for agent_key, result in zip(["evidence_normalizer", "risk_reviewer"], parallel_results):
+            if isinstance(result, Exception):
+                await update_step(agent_key, status="failed", completed_at=now_iso(), error=str(result))
+                raise result
+
+        await database.tasks.update_one({"audit_run_id": run_id, "task_type": "evidence_normalizer"}, {"$set": {"status": "completed", "output": outputs.get("evidence_normalizer", "")[:220]}})
+        reporter_output, _ = await execute_step("reporter")
+
+        await database.reports.update_one(
+            {"audit_run_id": run_id},
+            {
+                "$set": {
+                    "id": str(uuid4()),
+                    "audit_run_id": run_id,
+                    "title": f"{bundle['run']['target_name']} Review Draft",
+                    "executive_summary": reporter_output.split("\n", 1)[0][:220],
+                    "markdown": reporter_output,
+                    "review_status": "pending_review",
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                },
+                "$unset": {"approved_at": ""},
+            },
+            upsert=True,
+        )
+        await database.tasks.update_one({"audit_run_id": run_id, "task_type": "reporter"}, {"$set": {"status": "completed", "output": reporter_output[:220]}})
+        await database.agent_workflows.update_one({"id": workflow_id}, {"$set": {"status": "completed", "completed_at": now_iso(), "updated_at": now_iso()}})
+        await log_event("completed-agent-workflow", f"Completed multi-agent workflow for run {run_id}.")
+    except Exception as exc:  # noqa: BLE001
+        await database.agent_workflows.update_one({"id": workflow_id}, {"$set": {"status": "failed", "error": str(exc), "completed_at": now_iso(), "updated_at": now_iso()}})
+        await log_event("failed-agent-workflow", f"Agent workflow failed for run {run_id}: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return await get_latest_agent_workflow(run_id)
 
 
 @app.post("/api/runs/{run_id}/sections")

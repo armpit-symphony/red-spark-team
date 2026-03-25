@@ -86,6 +86,12 @@ This README is written for both:
 - Edit policy names, strategy goals, and primary/fallback routes from Settings
 - Keep direct/manual provider selection available alongside policy-driven routing
 
+### 2e) Multi-agent runtime
+- Run Planner, Evidence Normalizer, Risk Reviewer, and Reporter from the Run Detail page
+- Execute the plan first, then run evidence normalization and risk review in parallel, then hand both into the reporter
+- Keep workflow memory scoped to the current run
+- Track handoffs, step status, route used, and step outputs in a dedicated Agents tab
+
 ### 3) Scanner import and normalization
 - Import scanner output as **plain text** or **JSON**
 - Convert valid entries into normalized findings

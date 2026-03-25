@@ -82,3 +82,10 @@ class RoutingPolicyUpdate(BaseModel):
     primary_model: str = Field(min_length=2, max_length=120)
     fallback_provider: Literal["openai", "anthropic", "openrouter", "minimax"]
     fallback_model: str = Field(min_length=2, max_length=120)
+
+
+class AgentWorkflowRequest(BaseModel):
+    provider: Literal["openai", "anthropic", "openrouter", "minimax"]
+    model: str = Field(min_length=2, max_length=120)
+    routing_policy_id: str = Field(default="direct", min_length=2, max_length=120)
+    focus: str = Field(default="", max_length=500)

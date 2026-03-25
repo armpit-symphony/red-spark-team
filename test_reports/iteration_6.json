@@ -1,0 +1,67 @@
+{
+  "summary": "Validated Priority D multi-agent workflow surfaces and regressions on public preview. Agents tab/control panel render correctly, stored workflow GET contract is valid, routing/catalog/import regressions pass, but live agent-workflow execution currently fails due exhausted upstream LLM budget.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/runs/{run_id}/agent-workflow",
+        "issue": "POST fails with 400: 'Failed to generate chat completion ... Budget has been exceeded! Current cost: 2.035857600000001, Max budget: 2.0'. This blocks live Planner/Evidence/Risk/Reporter execution.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "/api/targets, /api/runs",
+        "issue": "Intermittent public endpoint instability observed as transient 502/connection abort during repeated test creation calls; retries required."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Tabs (Run Detail)",
+        "issue": "Tab trigger elements (e.g., Agents) are interactive but do not expose data-testid; automation required text fallback selector.",
+        "selector": "text=Agents",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Run Detail -> Agents -> Run multi-agent workflow",
+        "issue": "Workflow status transitions to failed and shows budget-exceeded backend error; reporter update for new execution cannot complete.",
+        "affected_selectors": [
+          "[data-testid='agent-workflow-run-button']",
+          "[data-testid='agent-workflow-status']",
+          "[data-testid='agent-workflow-error']"
+        ]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_priority_d_agent_workflow_runtime.py",
+    "/app/test_reports/pytest/pytest_results_iteration6_priority_d_final.xml",
+    "/app/test_reports/pytest/pytest_results_iteration6_regression_subset.xml"
+  ],
+  "action_items": [
+    "Restore/replace valid LLM budget/key for configured universal-auth providers so POST /api/runs/{run_id}/agent-workflow can execute end-to-end again.",
+    "After key/budget fix, re-run Priority D live POST workflow tests to validate planner-first, parallel middle stage, reporter completion, and current-run memory behavior.",
+    "Optionally add data-testid attributes to tab triggers in shared Tabs component for full testability compliance."
+  ],
+  "critical_code_review_comments": [
+    "agent_runtime_service.handoff_summary says Evidence Normalizer hands off to Risk Reviewer, but workflow executes evidence_normalizer and risk_reviewer in parallel; wording may mislead operators about real dependency timing.",
+    "Current workflow retrieval returns latest execution only; a failed latest run can hide previously successful step outputs in the UI context without quick fallback visibility."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_priority_d_agent_workflow_runtime.py",
+    "/app/test_reports/iteration_6.json"
+  ],
+  "success_rate": {
+    "backend": "72%",
+    "frontend": "85%"
+  },
+  "seed_data_creation": "Created TEST_ prefixed targets/runs via API during Priority D and scanner-import regression tests.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "UI Agents tab/control panel is present and wired. Existing run 3df373f0-8ac1-4efb-82b6-07a0deb135db still contains prior successful multi-agent artifacts/report draft, but new workflow launches now fail due LLM budget exhaustion. Non-LLM regressions (routing policy management, scanner import text/json, OpenRouter catalog refresh) passed.",
+  "rca of the issue": "Reproduction: 1) POST /api/runs/3df373f0-8ac1-4efb-82b6-07a0deb135db/agent-workflow with openai/anthropic in direct mode, or click Run multi-agent workflow in Agents tab. 2) Response/status becomes failed with message 'Budget has been exceeded'. Root cause: upstream LLM account quota/budget exhaustion in provider runtime path (not local schema/router logic). Mitigation: replenish/rotate provider credentials or budget, then rerun Priority D e2e checks."
+}
