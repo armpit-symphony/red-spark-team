@@ -1,5 +1,10 @@
-const rawApiBase = (process.env.REACT_APP_BACKEND_URL || '/api').trim().replace(/\/$/, '');
-const API_BASE = rawApiBase.startsWith('http') && !rawApiBase.endsWith('/api') ? `${rawApiBase}/api` : (rawApiBase || '/api');
+const rawApiBase = (process.env.REACT_APP_BACKEND_URL || '').trim().replace(/\/$/, '');
+
+if (!rawApiBase) {
+  throw new Error('REACT_APP_BACKEND_URL is required for frontend API calls.');
+}
+
+const API_BASE = rawApiBase.startsWith('http') && !rawApiBase.endsWith('/api') ? `${rawApiBase}/api` : rawApiBase;
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {

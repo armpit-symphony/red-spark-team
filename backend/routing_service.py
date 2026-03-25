@@ -9,6 +9,32 @@ from models import now_iso
 
 ROUTING_CONFIG_PATH = Path("/app/configs/routing.yaml")
 ROUTING_SETTINGS_ID = "default-routing-settings"
+DEFAULT_ROUTING_POLICIES = [
+    {
+        "id": "reliable-default",
+        "label": "Reliable Default",
+        "description": "Use OpenAI first, then try Anthropic once if the primary route fails.",
+        "goal": "reliability_first",
+        "primary": {"provider": "openai", "model": "gpt-5.2"},
+        "fallback": {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929"},
+    },
+    {
+        "id": "openrouter-reliable",
+        "label": "OpenRouter First",
+        "description": "Use OpenRouter first, then try OpenAI once if the primary route fails.",
+        "goal": "reliability_first",
+        "primary": {"provider": "openrouter", "model": "openai/gpt-4.1-mini"},
+        "fallback": {"provider": "openai", "model": "gpt-5.2"},
+    },
+    {
+        "id": "minimax-reliable",
+        "label": "MiniMax First",
+        "description": "Use MiniMax first, then try Anthropic once if the primary route fails.",
+        "goal": "reliability_first",
+        "primary": {"provider": "minimax", "model": "MiniMax-Text-01"},
+        "fallback": {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929"},
+    },
+]
 
 
 def _normalize_candidate(candidate: dict[str, Any]) -> dict[str, str]:
@@ -19,8 +45,13 @@ def _normalize_candidate(candidate: dict[str, Any]) -> dict[str, str]:
 
 
 def load_routing_policies() -> list[dict[str, Any]]:
-    payload = yaml.safe_load(ROUTING_CONFIG_PATH.read_text()) or {}
-    policies = payload.get("routing_policies") or []
+    try:
+        payload = yaml.safe_load(ROUTING_CONFIG_PATH.read_text()) if ROUTING_CONFIG_PATH.exists() else {}
+        payload = payload or {}
+        policies = payload.get("routing_policies") or DEFAULT_ROUTING_POLICIES
+    except Exception:  # noqa: BLE001
+        policies = DEFAULT_ROUTING_POLICIES
+
     now = now_iso()
     normalized = []
 
