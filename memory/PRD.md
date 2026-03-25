@@ -1,45 +1,49 @@
 # PRD
 
 ## Original Problem Statement
-Continue the Priority C next action items: add richer routing telemetry, latency/cost-aware strategies, and editable policy management. User choices: score latency + cost + fallback success, show telemetry in Run Detail only, allow policy name/goal/primary/fallback editing, and use the last 25 routed analyses as the scoring memory window.
+Priority D. User choices: agents = Planner + Evidence Normalizer + Risk Reviewer + Reporter, execution = parallel where possible with handoff tracking, memory scope = current run only, and control surface = Run Detail only.
 
 ## User Choices
-- Strategy inputs: latency + cost + fallback success
-- Telemetry surface: Run Detail only
-- Policy editing scope: name, strategy goal, primary route, fallback route
-- Memory window: last 25 routed analyses
+- Agents: Planner, Evidence Normalizer, Risk Reviewer, Reporter
+- Execution style: planner first, then parallel middle stage where possible, with tracked handoffs
+- Memory scope: current run only
+- Control surface: Run Detail only
 
 ## Architecture Decisions
-- Kept telemetry and scoring in the backend so route ranking logic stays consistent across UI surfaces and future automation
-- Stored routing traces per attempt so preferred/backup scoring can use real success and latency history over the configured 25-attempt window
-- Limited the first editable policy release to the fields the user requested while keeping direct/manual mode intact
-- Kept telemetry display in Run Detail only to avoid cluttering Settings with operational noise
-- Added server-side validation to reject identical primary/fallback pairs, preserving the one-fallback resilience intent
+- Added a real run-scoped multi-agent runtime with persisted workflow and step records instead of relying on static timeline tasks only
+- Kept orchestration in the backend so sequencing, parallel stages, handoffs, and route traces stay authoritative
+- Reused the existing routing layer so agent steps can run through direct or policy-based model selection
+- Stored agent outputs back into workspace artifacts (`agent-plan`, `normalized-evidence`, `risk-review`, `report-draft`) so they remain part of the run context
+- Limited memory to the current run exactly as requested
 
 ## What’s Implemented
-- Added routing telemetry summaries and recent trace history based on the last 25 routed analyses
-- Added latency/cost/fallback-success-aware route scoring that ranks the preferred and backup route for each policy
-- Added editable policy management in Settings for policy name, strategy goal, primary route, and fallback route
-- Added Run Detail telemetry cards and recent trace items for the selected routing policy
-- Added backend APIs for routing telemetry and policy editing
-- Added validation that rejects identical primary/fallback provider-model pairs with HTTP 400
-- Expanded regression coverage; the updated Priority C suites now pass after the validation fix
+- Added a new multi-agent runtime with Planner -> parallel Evidence Normalizer + Risk Reviewer -> Reporter
+- Added `GET/POST /api/runs/{run_id}/agent-workflow` for latest workflow state and execution
+- Added persisted workflow steps with status, route trace, output, error, dependencies, and handoff summary
+- Added an Agents tab in Run Detail with workflow launch controls, status cards, and step outputs
+- Reporter output now updates the report workspace and report record after workflow completion
+- Updated README and gap-analysis docs to reflect that Priority D is now partially implemented
+- Self-test passed once with all four agents completing on a live run
+
+## Current Blocking Validation Issue
+- Subsequent end-to-end validation is currently blocked by upstream LLM budget exhaustion (`Budget has been exceeded`) for live agent-workflow execution
+- Non-LLM regressions and UI surfaces passed; the blocked flow is live POST `/api/runs/{run_id}/agent-workflow` execution while provider budget/quota is exhausted
 
 ## Prioritized Backlog
 ### P0
-- Add richer telemetry visualizations, route health trend indicators, and clearer scoring explanations
+- Restore valid provider budget/key and re-run live multi-agent workflow validation end-to-end
 
 ### P1
-- Add threshold/weight editing and stronger policy validation rules
-- Add deterministic success-path fallback testing for `used_fallback=true`
-- Expand strategy types and model/provider-aware route heuristics
+- Add retries / resumability for failed steps
+- Surface previous successful workflow history when the latest run fails
+- Add clearer handoff wording and richer workflow history
 
 ### P2
-- Start Priority D multi-agent runtime work
-- Add deeper observability, auth/RBAC, and long-term route history views
-- Broaden provider/model intelligence beyond current manual hints
+- Start Priority E execution/scanner plane
+- Add deeper observability, auth/RBAC, and longer-lived memory options
+- Add deterministic fallback-success validation once provider budget is available
 
 ## Next Tasks
-- Add route trend charts and clearer score breakdowns in Run Detail
-- Add policy weights/thresholds and stricter editor validation
-- Begin Priority D: real multi-agent runtime and coordination flows
+- Restore LLM budget/key and re-run live Priority D workflow tests
+- Add step retry/resume controls and prior-workflow history in the Agents tab
+- Begin Priority E: built-in audit execution and scanner integration
