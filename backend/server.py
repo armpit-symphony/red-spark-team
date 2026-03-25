@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import clean_document, database
 from llm_service import run_provider_analysis
-from models import AnalysisRequest, PolicyUpdate, ProviderUpdate, RunCreate, ScannerImportRequest, SectionUpsert, TargetCreate, now_iso
+from model_catalog_service import refresh_openrouter_catalog
+from models import AnalysisRequest, ModelCatalogRefreshRequest, PolicyUpdate, ProviderUpdate, RunCreate, ScannerImportRequest, SectionUpsert, TargetCreate, now_iso
 from security_utils import encrypt_secret
 from seed import seed_database
 
@@ -373,6 +374,7 @@ async def startup_event():
     await seed_database(database)
     await migrate_provider_storage()
     await migrate_report_reviews()
+    await refresh_openrouter_catalog(database)
 
 
 @app.get("/api/health")
@@ -451,6 +453,34 @@ async def get_providers():
     async for item in database.providers.find({}, {"_id": 0}).sort("label", 1):
         providers.append(serialize_provider(item))
     return providers
+
+
+@app.get("/api/model-catalog")
+async def get_model_catalog(provider: str):
+    if provider != "openrouter":
+        return {"provider": provider, "models": [], "model_count": 0, "source": "unsupported", "refresh_status": "unsupported"}
+
+    meta = clean_document(await database.model_catalog_meta.find_one({"provider": provider}, {"_id": 0})) or {
+        "provider": provider,
+        "model_count": 0,
+        "source": "unknown",
+        "refresh_status": "unknown",
+        "last_refreshed_at": "",
+        "last_error": "",
+    }
+    models = [clean_document(item) async for item in database.model_catalog.find({"provider": provider}, {"_id": 0}).sort("name", 1)]
+    return {**meta, "models": models}
+
+
+@app.post("/api/model-catalog/refresh")
+async def refresh_model_catalog(payload: ModelCatalogRefreshRequest):
+    if payload.provider != "openrouter":
+        raise HTTPException(status_code=400, detail="Only the openrouter catalog is supported right now.")
+
+    meta = await refresh_openrouter_catalog(database)
+    await log_event("refreshed-model-catalog", f"Refreshed {payload.provider} model catalog with {meta['model_count']} entries via {meta['source']}.")
+    models = [clean_document(item) async for item in database.model_catalog.find({"provider": payload.provider}, {"_id": 0}).sort("name", 1)]
+    return {**meta, "models": models}
 
 
 @app.put("/api/providers/{provider_name}")

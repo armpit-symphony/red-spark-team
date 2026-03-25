@@ -48,19 +48,28 @@ OpenRouter documentation recommends sending these headers when appropriate:
 
 The current repo does **not** send these headers yet. They are a good follow-up enhancement for analytics and provider-side app attribution.
 
+## Current repo capability
+
+The repo now includes a first-pass OpenRouter model catalog flow:
+
+- backend startup refresh for the OpenRouter catalog
+- manual refresh endpoint
+- API + manual fallback list strategy
+- model browsing in **Settings** and **Run Detail**
+
 ## Current limitations
 
-- no automatic OpenRouter model catalog sync yet
-- no model discovery UI yet
+- no full provider-model registry beyond OpenRouter yet
+- no advanced filtering, pricing explorer, or context-based ranking UI yet
 - no routing or fallback layer yet
 - no per-tenant secret context yet
 
 ## Suggested next build steps
 
-### 1. Model catalog ingestion
-- fetch OpenRouter Models API on a schedule
-- store normalized model metadata in the database
-- surface searchable model choices in Settings and Run Detail
+### 1. Model catalog maturity
+- add richer model fields in the UI when needed (pricing, context, description)
+- support filtering and sorting once operator workflows need it
+- define catalog refresh telemetry and stale-data warnings
 
 ### 2. Safer secrets handling
 - move from app-level storage only to dedicated secret management / rotation for production

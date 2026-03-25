@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '../components/ui/button';
@@ -7,14 +7,24 @@ import { api } from '../lib/api';
 
 export default function SettingsPage() {
   const [providers, setProviders] = useState([]);
+  const [openRouterCatalog, setOpenRouterCatalog] = useState({ models: [], model_count: 0, source: '', refresh_status: '', last_refreshed_at: '' });
   const [savingProvider, setSavingProvider] = useState('');
   const [removingProvider, setRemovingProvider] = useState('');
+  const [refreshingCatalog, setRefreshingCatalog] = useState(false);
 
-  const loadProviders = () => api.get('/providers').then(setProviders).catch((error) => toast.error(error.message));
+  const loadPage = useCallback(async () => {
+    try {
+      const [providerData, catalogData] = await Promise.all([api.get('/providers'), api.get('/model-catalog?provider=openrouter')]);
+      setProviders(providerData);
+      setOpenRouterCatalog(catalogData);
+    } catch (error) {
+      toast.error(error.message);
+    }
+  }, []);
 
   useEffect(() => {
-    loadProviders();
-  }, []);
+    loadPage();
+  }, [loadPage]);
 
   const updateField = (providerName, key, value) => {
     setProviders((current) => current.map((provider) => (provider.provider === providerName ? { ...provider, [key]: value } : provider)));
@@ -25,7 +35,7 @@ export default function SettingsPage() {
       setSavingProvider(provider.provider);
       await api.put(`/providers/${provider.provider}`, provider);
       toast.success(`${provider.label} settings saved`);
-      loadProviders();
+      loadPage();
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -38,11 +48,24 @@ export default function SettingsPage() {
       setRemovingProvider(provider.provider);
       await api.delete(`/providers/${provider.provider}/custom-key`);
       toast.success(`${provider.label} custom key removed`);
-      loadProviders();
+      loadPage();
     } catch (error) {
       toast.error(error.message);
     } finally {
       setRemovingProvider('');
+    }
+  };
+
+  const refreshOpenRouterCatalog = async () => {
+    try {
+      setRefreshingCatalog(true);
+      const catalog = await api.post('/model-catalog/refresh', { provider: 'openrouter' });
+      setOpenRouterCatalog(catalog);
+      toast.success(`OpenRouter catalog refreshed (${catalog.model_count} models)`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setRefreshingCatalog(false);
     }
   };
 
@@ -78,7 +101,20 @@ export default function SettingsPage() {
                 </Button>
               </div>
             </div>
-            <div className="field-stack"><label className="field-label">Model</label><Input value={provider.model} onChange={(e) => updateField(provider.provider, 'model', e.target.value)} data-testid={`provider-model-${provider.provider}`} /></div>
+            {provider.provider === 'openrouter' ? (
+              <div className="field-stack">
+                <div className="panel-header">
+                  <div>
+                    <label className="field-label">OpenRouter catalog</label>
+                    <div className="muted" data-testid="openrouter-catalog-meta">{openRouterCatalog.model_count || 0} models · {openRouterCatalog.source || 'unknown source'}</div>
+                  </div>
+                  <Button onClick={refreshOpenRouterCatalog} disabled={refreshingCatalog} data-testid="openrouter-catalog-refresh-button">
+                    {refreshingCatalog ? 'Refreshing…' : 'Refresh catalog'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            <div className="field-stack"><label className="field-label">Model</label>{provider.provider === 'openrouter' && openRouterCatalog.models.length ? <select className="select" value={provider.model} onChange={(e) => updateField(provider.provider, 'model', e.target.value)} data-testid={`provider-model-${provider.provider}`}>{openRouterCatalog.models.some((model) => model.model_id === provider.model) ? null : <option value={provider.model}>{provider.model}</option>}{openRouterCatalog.models.map((model) => <option key={model.model_id} value={model.model_id}>{model.name}</option>)}</select> : <Input value={provider.model} onChange={(e) => updateField(provider.provider, 'model', e.target.value)} data-testid={`provider-model-${provider.provider}`} />}</div>
             <div className="field-stack"><label className="field-label">Auth mode</label><select className="select" value={provider.auth_mode} onChange={(e) => updateField(provider.provider, 'auth_mode', e.target.value)} data-testid={`provider-auth-mode-${provider.provider}`}><option value="universal">Universal</option><option value="custom">Custom</option></select></div>
             <div className="field-stack"><label className="field-label">Base URL</label><Input value={provider.base_url || ''} onChange={(e) => updateField(provider.provider, 'base_url', e.target.value)} data-testid={`provider-base-url-${provider.provider}`} /></div>
             <div className="field-stack"><label className="field-label">Custom API key</label><Input type="password" placeholder={provider.has_custom_key ? `Stored ending ${provider.key_last4}` : 'Optional unless provider requires custom auth'} onChange={(e) => updateField(provider.provider, 'custom_api_key', e.target.value)} data-testid={`provider-api-key-${provider.provider}`} /></div>

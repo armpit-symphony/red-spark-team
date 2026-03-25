@@ -16,7 +16,7 @@ This file tracks the current platform against the broader original vision and se
 | Accepts user-supplied API keys: Anthropic | Implemented | Anthropic follows the same provider settings and encrypted storage flow as OpenAI | Same single-admin limitation applies |
 | Accepts user-supplied API keys: Agentic | Not implemented | No Agentic provider exists in provider seeds, settings UI, runtime adapter, or tests | Needs provider config, UI, runtime adapter, and documentation |
 | Accepts user-supplied API keys: OpenRouter | Implemented | OpenRouter is seeded as a custom-auth provider; backend stores encrypted keys and uses OpenRouter-compatible `chat/completions` requests | Production hardening still needs tenant isolation and stronger secrets lifecycle |
-| Enumerates and can use 400+ models via plugin/config | Not implemented | Model fields are currently free-text inputs; no model catalog ingestion exists | Needs provider catalog sync, storage, refresh jobs, and UI for browsing models |
+| Enumerates and can use 400+ models via plugin/config | Partially implemented (gaps) | OpenRouter now has startup refresh + manual refresh + UI browsing in Settings and Run Detail backed by the OpenRouter Models API with manual fallback | Still limited to OpenRouter only; no broader plugin/config registry or cross-provider catalog yet |
 | Multi-model orchestration (routing, fallback, policy selection) | Not implemented | Each analysis request currently selects one provider and one model | Needs router, policy engine, fallback handling, latency/cost heuristics, and observability |
 | Multi-agent workflows | Partially implemented (gaps) | Runs seed planner/reporter-style tasks and show workflow stages in the UI | Tasks are timeline records, not a true agent runtime with memory, tools, state transitions, or coordination |
 | Audits code/apps/websites/scripts directly | Partially implemented (gaps) | Targets, runs, evidence capture, imports, findings, and reports are implemented | No built-in execution plane or scanner runner exists yet; current flow depends on imported or pasted results |
@@ -44,10 +44,10 @@ The current repo now explicitly supports:
 ## Recommended next implementation steps
 
 ### Next focus: Priority B
-- add OpenRouter setup guide and operator documentation
-- add provider-model catalog sync design
-- define catalog storage schema and refresh strategy
-- expose curated model selection in the UI instead of free-text only
+- expand from OpenRouter-only catalog to a broader provider model registry
+- add richer browsing controls when needed (context, pricing, descriptions)
+- define catalog refresh telemetry, stale-data handling, and provider health indicators
+- keep preparing the transition into Priority C routing work
 
 ### After that: Priority C
 - introduce routing groups and fallback policy objects

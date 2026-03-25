@@ -64,3 +64,7 @@ class ScannerImportRequest(BaseModel):
     import_format: Literal["text", "json"]
     source_name: str = Field(default="Scanner Import", min_length=2, max_length=120)
     content: str = Field(min_length=2, max_length=120000)
+
+
+class ModelCatalogRefreshRequest(BaseModel):
+    provider: Literal["openrouter"] = "openrouter"

@@ -48,6 +48,7 @@ export default function RunDetailPage() {
   const [providers, setProviders] = useState([]);
   const [analysisConfig, setAnalysisConfig] = useState({ provider: 'openai', model: 'gpt-5.2', analysis_type: 'report_draft', focus: '' });
   const [sectionDrafts, setSectionDrafts] = useState({});
+  const [openRouterCatalog, setOpenRouterCatalog] = useState({ models: [], model_count: 0, source: '', refresh_status: '' });
   const [importDraft, setImportDraft] = useState(initialImportDraft);
   const [importSummary, setImportSummary] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -55,9 +56,10 @@ export default function RunDetailPage() {
   const [exportingAction, setExportingAction] = useState('');
 
   const loadBundle = useCallback(async () => {
-    const [runData, providerData] = await Promise.all([api.get(`/runs/${runId}`), api.get('/providers')]);
+    const [runData, providerData, catalogData] = await Promise.all([api.get(`/runs/${runId}`), api.get('/providers'), api.get('/model-catalog?provider=openrouter')]);
     setBundle(runData);
     setProviders(providerData.filter((provider) => provider.enabled));
+    setOpenRouterCatalog(catalogData);
     const firstProvider = providerData.find((provider) => provider.enabled);
     if (firstProvider) {
       setAnalysisConfig((current) => ({ ...current, provider: firstProvider.provider, model: firstProvider.model }));
@@ -181,7 +183,7 @@ export default function RunDetailPage() {
         </div>
         <div className="field-grid" style={{ marginTop: 16 }}>
           <div className="field"><label className="field-label">Provider</label><select className="select" value={analysisConfig.provider} onChange={(e) => { const selected = providers.find((provider) => provider.provider === e.target.value); setAnalysisConfig({ ...analysisConfig, provider: e.target.value, model: selected?.model || analysisConfig.model }); }} data-testid="run-analysis-provider-select">{providers.map((provider) => <option key={provider.provider} value={provider.provider}>{provider.label}</option>)}</select></div>
-          <div className="field"><label className="field-label">Model</label><Input value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-input" /></div>
+          <div className="field"><label className="field-label">Model</label>{analysisConfig.provider === 'openrouter' && openRouterCatalog.models.length ? <select className="select" value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-select">{openRouterCatalog.models.some((model) => model.model_id === analysisConfig.model) ? null : <option value={analysisConfig.model}>{analysisConfig.model}</option>}{openRouterCatalog.models.map((model) => <option key={model.model_id} value={model.model_id}>{model.name}</option>)}</select> : <Input value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-input" />}{analysisConfig.provider === 'openrouter' ? <div className="muted" style={{ marginTop: 8 }} data-testid="run-analysis-openrouter-catalog-meta">{openRouterCatalog.model_count || 0} catalog models · {openRouterCatalog.source || 'unknown source'}</div> : null}</div>
           <div className="field"><label className="field-label">Output type</label><select className="select" value={analysisConfig.analysis_type} onChange={(e) => setAnalysisConfig({ ...analysisConfig, analysis_type: e.target.value })} data-testid="run-analysis-type-select"><option value="report_draft">Report draft</option><option value="finding_summary">Finding summary</option><option value="remediation_plan">Remediation plan</option></select></div>
           <div className="field"><label className="field-label">Focus</label><Input value={analysisConfig.focus} onChange={(e) => setAnalysisConfig({ ...analysisConfig, focus: e.target.value })} data-testid="run-analysis-focus-input" /></div>
         </div>

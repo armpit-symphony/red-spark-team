@@ -15,7 +15,8 @@ if not BACKEND_PATH_PREFIX:
 
 def resolve_base_url() -> str:
     if BACKEND_PATH_PREFIX.startswith("http"):
-        return BACKEND_PATH_PREFIX.rstrip("/")
+        base = BACKEND_PATH_PREFIX.rstrip("/")
+        return base if base.endswith("/api") else f"{base}/api"
     # In this environment, frontend proxy serves relative /api paths.
     return f"http://127.0.0.1:3000{BACKEND_PATH_PREFIX}".rstrip("/")
 

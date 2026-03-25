@@ -68,6 +68,12 @@ This README is written for both:
 - Update or remove keys later
 - Use universal-key or custom-key modes by provider
 
+### 2b) OpenRouter model catalog
+- Sync OpenRouter models on backend startup
+- Refresh the catalog manually from Settings
+- Browse OpenRouter model names from both Settings and Run Detail
+- Fall back to a curated manual list if the remote catalog is unavailable
+
 ### 3) Scanner import and normalization
 - Import scanner output as **plain text** or **JSON**
 - Convert valid entries into normalized findings

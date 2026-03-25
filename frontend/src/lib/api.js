@@ -1,4 +1,5 @@
-const API_BASE = process.env.REACT_APP_BACKEND_URL;
+const rawApiBase = (process.env.REACT_APP_BACKEND_URL || '/api').trim().replace(/\/$/, '');
+const API_BASE = rawApiBase.startsWith('http') && !rawApiBase.endsWith('/api') ? `${rawApiBase}/api` : (rawApiBase || '/api');
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {

@@ -21,7 +21,8 @@ if not BACKEND_PATH_PREFIX:
 
 def resolve_base_url() -> str:
     if BACKEND_PATH_PREFIX.startswith("http"):
-        return BACKEND_PATH_PREFIX.rstrip("/")
+        base = BACKEND_PATH_PREFIX.rstrip("/")
+        return base if base.endswith("/api") else f"{base}/api"
     return f"http://127.0.0.1:3000{BACKEND_PATH_PREFIX}".rstrip("/")
 
 
@@ -259,3 +260,25 @@ def test_report_pending_to_approved_and_export_markdown_workflow(api_client):
     detail_report = run_detail.json()["report"]
     assert detail_report["review_status"] == "approved"
     assert detail_report["can_export"] is True
+
+
+def test_openrouter_model_catalog_loads_and_manual_refresh_works(api_client):
+    """Model catalog module: OpenRouter catalog is readable and manual refresh returns entries."""
+    catalog_response = api_client.get(f"{BASE_URL}/model-catalog", params={"provider": "openrouter"})
+    assert catalog_response.status_code == 200
+    catalog = catalog_response.json()
+
+    assert catalog["provider"] == "openrouter"
+    assert isinstance(catalog["models"], list)
+    assert catalog["model_count"] >= 1
+    assert catalog["refresh_status"] in {"ok", "fallback"}
+    assert catalog["source"] in {"openrouter_models_api", "manual_fallback"}
+
+    refresh_response = api_client.post(f"{BASE_URL}/model-catalog/refresh", json={"provider": "openrouter"})
+    assert refresh_response.status_code == 200
+    refreshed = refresh_response.json()
+
+    assert refreshed["provider"] == "openrouter"
+    assert refreshed["model_count"] >= 1
+    assert isinstance(refreshed["models"], list)
+    assert refreshed["refresh_status"] in {"ok", "fallback"}
