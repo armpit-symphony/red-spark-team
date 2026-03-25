@@ -52,7 +52,7 @@ export default function SettingsPage() {
         <div>
           <div className="eyebrow">Model Plane</div>
           <h1 className="page-title" data-testid="settings-page-title">Choose which provider drafts and reviews your outputs</h1>
-          <p className="page-subtitle" data-testid="settings-page-subtitle">OpenAI and Anthropic can use the universal key. OpenRouter and MiniMax stay available for your custom API keys, which are now stored encrypted and can be removed at any time.</p>
+          <p className="page-subtitle" data-testid="settings-page-subtitle">OpenAI and Anthropic can use either the universal key or your own encrypted custom key. OpenRouter and MiniMax stay available for custom API keys, which can also be updated or removed at any time.</p>
         </div>
       </header>
 

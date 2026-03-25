@@ -47,17 +47,16 @@ def mongo_db():
     client.close()
 
 
-@pytest.fixture
-def provider_backup(api_client):
+def provider_backup_for(api_client, provider_name: str):
     """Backup provider config and restore after mutation tests."""
     response = api_client.get(f"{BASE_URL}/providers")
     assert response.status_code == 200
     providers = response.json()
-    target = next((item for item in providers if item["provider"] == "openrouter"), None)
+    target = next((item for item in providers if item["provider"] == provider_name), None)
     if not target:
-        pytest.skip("openrouter provider not available in current seed data")
+        pytest.skip(f"{provider_name} provider not available in current seed data")
 
-    backup = {
+    return {
         "provider": target["provider"],
         "payload": {
             "model": target["model"],
@@ -68,12 +67,6 @@ def provider_backup(api_client):
         },
         "had_custom_key": bool(target.get("has_custom_key")),
     }
-
-    yield backup
-
-    api_client.put(f"{BASE_URL}/providers/{backup['provider']}", json=backup["payload"])
-    if not backup["had_custom_key"]:
-        api_client.delete(f"{BASE_URL}/providers/{backup['provider']}/custom-key")
 
 
 def create_test_run(api_client):
@@ -103,42 +96,48 @@ def create_test_run(api_client):
     return run_bundle["run"]["id"]
 
 
-def test_provider_custom_key_save_is_encrypted_and_remove_works(api_client, mongo_db, provider_backup):
-    """Settings module: custom key save/remove and encrypted-at-rest persistence verification."""
-    provider_name = provider_backup["provider"]
+@pytest.mark.parametrize("provider_name", ["openai", "anthropic", "openrouter"])
+def test_provider_custom_key_save_is_encrypted_and_remove_works(api_client, mongo_db, provider_name):
+    """Settings module: OpenAI, Anthropic, and OpenRouter custom key save/remove plus encrypted-at-rest verification."""
+    provider_backup = provider_backup_for(api_client, provider_name)
     test_key = f"TEST_PROVIDER_KEY_{uuid4().hex}"
 
-    save_payload = {
-        **provider_backup["payload"],
-        "auth_mode": "custom",
-        "enabled": True,
-        "custom_api_key": test_key,
-    }
-    save_response = api_client.put(f"{BASE_URL}/providers/{provider_name}", json=save_payload)
-    assert save_response.status_code == 200
-    saved = save_response.json()
+    try:
+        save_payload = {
+            **provider_backup["payload"],
+            "auth_mode": "custom",
+            "enabled": True,
+            "custom_api_key": test_key,
+        }
+        save_response = api_client.put(f"{BASE_URL}/providers/{provider_name}", json=save_payload)
+        assert save_response.status_code == 200
+        saved = save_response.json()
 
-    assert saved["provider"] == provider_name
-    assert saved["has_custom_key"] is True
-    assert saved["key_last4"] == test_key[-4:]
-    assert saved["status"] == "ready"
-    assert "custom_api_key" not in saved
-    assert "encrypted_custom_api_key" not in saved
+        assert saved["provider"] == provider_name
+        assert saved["has_custom_key"] is True
+        assert saved["key_last4"] == test_key[-4:]
+        assert saved["status"] == "ready"
+        assert "custom_api_key" not in saved
+        assert "encrypted_custom_api_key" not in saved
 
-    db_provider = mongo_db.providers.find_one({"provider": provider_name}, {"_id": 0})
-    assert isinstance(db_provider.get("encrypted_custom_api_key", ""), str)
-    assert len(db_provider.get("encrypted_custom_api_key", "")) > 20
-    assert db_provider.get("encrypted_custom_api_key") != test_key
-    assert (db_provider.get("custom_api_key") or "") == ""
+        db_provider = mongo_db.providers.find_one({"provider": provider_name}, {"_id": 0})
+        assert isinstance(db_provider.get("encrypted_custom_api_key", ""), str)
+        assert len(db_provider.get("encrypted_custom_api_key", "")) > 20
+        assert db_provider.get("encrypted_custom_api_key") != test_key
+        assert (db_provider.get("custom_api_key") or "") == ""
 
-    remove_response = api_client.delete(f"{BASE_URL}/providers/{provider_name}/custom-key")
-    assert remove_response.status_code == 200
-    removed = remove_response.json()
-    assert removed["has_custom_key"] is False
-    assert removed["key_last4"] == ""
+        remove_response = api_client.delete(f"{BASE_URL}/providers/{provider_name}/custom-key")
+        assert remove_response.status_code == 200
+        removed = remove_response.json()
+        assert removed["has_custom_key"] is False
+        assert removed["key_last4"] == ""
 
-    db_provider_removed = mongo_db.providers.find_one({"provider": provider_name}, {"_id": 0})
-    assert "encrypted_custom_api_key" not in db_provider_removed
+        db_provider_removed = mongo_db.providers.find_one({"provider": provider_name}, {"_id": 0})
+        assert "encrypted_custom_api_key" not in db_provider_removed
+    finally:
+        api_client.put(f"{BASE_URL}/providers/{provider_backup['provider']}", json=provider_backup["payload"])
+        if not provider_backup["had_custom_key"]:
+            api_client.delete(f"{BASE_URL}/providers/{provider_backup['provider']}/custom-key")
 
 
 def test_scanner_import_text_normalizes_findings_and_skips_invalid_items(api_client):

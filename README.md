@@ -111,7 +111,7 @@ This README is written for both:
 - Stores application records, findings, report drafts, provider settings, and audit events
 
 ### LLM support
-- OpenAI / Anthropic through universal-key workflows
+- OpenAI / Anthropic through universal-key or encrypted custom-key workflows
 - OpenRouter / MiniMax through custom provider settings
 
 ### Primary workflow
@@ -201,7 +201,7 @@ Remediation: Remove unsafe-inline and move to nonce-based scripts.
 Open **Settings** and review the providers available for analysis.
 
 Recommended flow:
-- leave OpenAI / Anthropic on universal mode if your environment supports it
+- leave OpenAI / Anthropic on universal mode if your environment supports it, or switch them to custom mode for user-supplied provider keys
 - use custom mode for OpenRouter / MiniMax if needed
 - save or remove custom keys as required
 
@@ -601,10 +601,13 @@ The repository now includes self-hosting templates you can adapt directly:
 ### Future-state config references
 - `configs/providers.yaml`
 - `configs/routing.yaml`
+- `docs/requirements-gap-analysis.md`
+- `docs/openrouter-setup.md`
 
 Important:
 - the Docker and Kubernetes files are practical deployment templates
 - the `configs/providers.yaml` and `configs/routing.yaml` files are **reference templates for future-state architecture** and are **not yet wired into the live runtime**
+- the docs files capture the current requirements gap analysis and OpenRouter setup direction so the roadmap stays current
 
 ---
 
