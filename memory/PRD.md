@@ -1,45 +1,45 @@
 # PRD
 
 ## Original Problem Statement
-Go on Priority C. User choices: support all currently available providers, optimize for reliability / fallback first, let operators choose routing policy in both Settings and Run Detail, and when the primary fails try one fallback then show the error reason if it also fails.
+Continue the Priority C next action items: add richer routing telemetry, latency/cost-aware strategies, and editable policy management. User choices: score latency + cost + fallback success, show telemetry in Run Detail only, allow policy name/goal/primary/fallback editing, and use the last 25 routed analyses as the scoring memory window.
 
 ## User Choices
-- Routing scope: all current providers
-- Primary optimization: reliability first
-- Policy selection surface: Settings + Run Detail
-- Fallback behavior: one fallback only, then show why it failed
+- Strategy inputs: latency + cost + fallback success
+- Telemetry surface: Run Detail only
+- Policy editing scope: name, strategy goal, primary route, fallback route
+- Memory window: last 25 routed analyses
 
 ## Architecture Decisions
-- Introduced a config-backed routing layer driven by `/app/configs/routing.yaml` so routing policy behavior is explicit and maintainable
-- Kept the first router deliberately simple: primary route + one fallback route, no multi-hop chains yet
-- Added a persisted default routing policy in backend storage so Settings can define the app default while Run Detail can override it per analysis
-- Preserved direct/manual provider selection as a first-class option so existing workflows remain intact
-- Hardened both routing config loading and frontend API base handling so the new layer is resilient without hiding config mistakes
+- Kept telemetry and scoring in the backend so route ranking logic stays consistent across UI surfaces and future automation
+- Stored routing traces per attempt so preferred/backup scoring can use real success and latency history over the configured 25-attempt window
+- Limited the first editable policy release to the fields the user requested while keeping direct/manual mode intact
+- Kept telemetry display in Run Detail only to avoid cluttering Settings with operational noise
+- Added server-side validation to reject identical primary/fallback pairs, preserving the one-fallback resilience intent
 
 ## What’s Implemented
-- Added `/app/backend/routing_service.py` with config sync, default routing settings, and safe fallback to built-in policies if `configs/routing.yaml` is missing or malformed
-- Added routing policy APIs: list policies and update the default policy
-- Extended run analysis so `routing_policy_id` can select a policy, attempt the primary route, try one fallback, and return explicit primary/fallback error reasons if both fail
-- Added Settings UI for default routing policy selection and policy cards
-- Added Run Detail routing selector with primary/fallback route preview and clear one-fallback note
-- Updated README and requirements-gap docs to reflect that Priority C is now partially implemented
-- Added regression coverage for routing policy APIs, default updates, fallback error reporting, and direct/manual mode regression; test suites now pass
+- Added routing telemetry summaries and recent trace history based on the last 25 routed analyses
+- Added latency/cost/fallback-success-aware route scoring that ranks the preferred and backup route for each policy
+- Added editable policy management in Settings for policy name, strategy goal, primary route, and fallback route
+- Added Run Detail telemetry cards and recent trace items for the selected routing policy
+- Added backend APIs for routing telemetry and policy editing
+- Added validation that rejects identical primary/fallback provider-model pairs with HTTP 400
+- Expanded regression coverage; the updated Priority C suites now pass after the validation fix
 
 ## Prioritized Backlog
 ### P0
-- Add richer routing telemetry and route health indicators
+- Add richer telemetry visualizations, route health trend indicators, and clearer scoring explanations
 
 ### P1
-- Expand beyond reliability-first into latency/cost-aware strategies
-- Add policy editing instead of config-only seeded policies
-- Persist route traces per analysis more explicitly in the UI/history
+- Add threshold/weight editing and stronger policy validation rules
+- Add deterministic success-path fallback testing for `used_fallback=true`
+- Expand strategy types and model/provider-aware route heuristics
 
 ### P2
-- Start Priority D multi-agent runtime design
-- Later add Priority E execution/scanner plane
-- Strengthen auth/RBAC, observability, and production secret lifecycle
+- Start Priority D multi-agent runtime work
+- Add deeper observability, auth/RBAC, and long-term route history views
+- Broaden provider/model intelligence beyond current manual hints
 
 ## Next Tasks
-- Build the next router iteration with latency/cost signals and richer route metadata
-- Add policy editing and validation UI
-- Begin Priority D: real multi-agent runtime and coordination layer
+- Add route trend charts and clearer score breakdowns in Run Detail
+- Add policy weights/thresholds and stricter editor validation
+- Begin Priority D: real multi-agent runtime and coordination flows

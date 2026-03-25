@@ -512,6 +512,8 @@ async def update_routing_policy(policy_id: str, payload: RoutingPolicyUpdate):
     existing = clean_document(await database.routing_policies.find_one({"id": policy_id}, {"_id": 0}))
     if not existing:
         raise HTTPException(status_code=404, detail="Routing policy not found.")
+    if payload.primary_provider == payload.fallback_provider and payload.primary_model == payload.fallback_model:
+        raise HTTPException(status_code=400, detail="Primary and fallback routes must be different provider/model pairs.")
 
     updated_policy = {
         "id": existing["id"],

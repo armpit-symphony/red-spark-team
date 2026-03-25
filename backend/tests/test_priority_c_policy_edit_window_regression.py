@@ -95,3 +95,19 @@ def test_routing_policy_telemetry_uses_last_25_window_and_route_summaries(api_cl
     assert telemetry["preferred_route"]["model"]
     assert telemetry["backup_route"]["provider"]
     assert telemetry["backup_route"]["model"]
+
+
+def test_routing_policy_rejects_identical_primary_and_fallback_pair(api_client):
+    response = api_client.put(
+        f"{BASE_URL}/routing-policies/reliable-default",
+        json={
+            "label": "Invalid identical fallback test",
+            "goal": "balanced",
+            "primary_provider": "openai",
+            "primary_model": "gpt-5.2",
+            "fallback_provider": "openai",
+            "fallback_model": "gpt-5.2",
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Primary and fallback routes must be different provider/model pairs."
