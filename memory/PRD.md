@@ -1,41 +1,43 @@
 # PRD
 
 ## Original Problem Statement
-Use the supplied requirements gap analysis in the project, add roadmap/gap documentation, and start building the missing pieces with this priority order: A) OpenAI + Anthropic custom key support minimum, B) OpenRouter setup / catalog direction, C) routing, D) multi-agent runtime, E) built-in audit execution.
+Proceed with Priority B after the gap analysis: build OpenRouter setup + model catalog direction with these choices — OpenRouter Models API + manual fallback list, refresh on startup + manual refresh, UI in both Settings and Run Detail, and model name display first.
 
-## User Direction
-- Do both: document the gap analysis and begin implementation work
-- Priority A first: OpenAI and Anthropic custom key support minimum
-- Priority B next: OpenRouter setup guidance and model-catalog direction
-- Then C, D, E in order
+## User Choices
+- Catalog source: OpenRouter Models API + manual fallback list
+- Refresh strategy: backend startup refresh + manual refresh
+- UI scope: both Settings and Run Detail
+- Operator-visible fields: model name only
 
 ## Architecture Decisions
-- Treated Priority A as a verification + documentation hardening task because the runtime already supports encrypted custom key resolution for OpenAI and Anthropic
-- Added explicit docs that separate current capability from future roadmap so the repo stays accurate
-- Strengthened regression coverage across OpenAI, Anthropic, and OpenRouter custom-key save/remove flows
-- Added OpenRouter setup notes based on current docs while clearly marking future catalog/routing work as not yet wired in runtime
+- Added a dedicated backend model catalog service for OpenRouter so startup sync, manual refresh, and fallback handling stay isolated from general API logic
+- Stored normalized catalog metadata in MongoDB for fast UI reads and refresh-state visibility
+- Kept the first UI pass intentionally simple: model-name browsing only, with richer metadata stored for later use
+- Preserved OpenRouter as an opt-in provider for Run Detail by showing the picker when OpenRouter is enabled
+- Hardened frontend API base handling so full-domain env values without `/api` are normalized safely in the browser
 
 ## What’s Implemented
-- Added `/app/docs/requirements-gap-analysis.md` with implemented / partial / missing status tracking and a priority-based roadmap
-- Added `/app/docs/openrouter-setup.md` with current setup guidance, limitations, and next steps
-- Updated `README.md` to reflect OpenAI / Anthropic custom-key support and link to the new docs
-- Updated the Settings page copy so users understand OpenAI and Anthropic support universal or encrypted custom keys
-- Expanded backend regression coverage so provider key encryption/save/remove is tested for OpenAI, Anthropic, and OpenRouter
-- Verified the updated provider workflow suite passes: `6 passed`
+- Added `/app/backend/model_catalog_service.py` to fetch and normalize OpenRouter models, with a curated fallback list if the remote API is unavailable
+- Added startup refresh + manual refresh endpoints for the OpenRouter catalog
+- Added Settings page catalog controls and OpenRouter model browsing, including a manual refresh button
+- Added Run Detail model picker for OpenRouter using the catalog data
+- Added docs updates in `README.md`, `docs/openrouter-setup.md`, and `docs/requirements-gap-analysis.md`
+- Added regression coverage for Priority B and kept existing provider/import/report workflows passing
+- Fixed frontend API URL normalization so full-domain `REACT_APP_BACKEND_URL` values correctly target `/api`
 
 ## Prioritized Backlog
 ### P0
-- Priority B: add OpenRouter model catalog ingestion design and UI plan
+- Expand from OpenRouter-only catalog to a broader cross-provider model registry
 
 ### P1
-- Priority C: implement routing groups, fallback policy objects, and route decision logging
-- Priority D: design real agent runtime state/memory/tool execution layer
+- Add richer browsing/filtering (pricing, context window, descriptions) when operators need it
+- Start Priority C with routing groups, fallback policy objects, and route decision logging
 
 ### P2
-- Priority E: add sandboxed scanner execution and ingestion pipelines
-- Add stronger production auth/RBAC, secrets lifecycle, and observability
+- Add multi-agent runtime design and built-in execution/scanner infrastructure
+- Strengthen production auth/RBAC, secrets lifecycle, and observability
 
 ## Next Tasks
-- Start OpenRouter model catalog support and provider model discovery UI
-- Define routing schema and fallback behavior for multi-model orchestration
-- Add a dedicated implementation roadmap doc for C/D/E architecture work
+- Begin Priority C: multi-model routing and fallback policy layer
+- Add provider health / stale-catalog indicators and richer catalog filters
+- Extend model registry support beyond OpenRouter
