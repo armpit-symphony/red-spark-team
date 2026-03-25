@@ -58,6 +58,7 @@ class AnalysisRequest(BaseModel):
     model: str = Field(min_length=2, max_length=120)
     analysis_type: Literal["finding_summary", "report_draft", "remediation_plan"]
     focus: str = Field(default="", max_length=500)
+    routing_policy_id: str = Field(default="direct", min_length=2, max_length=120)
 
 
 class ScannerImportRequest(BaseModel):
@@ -68,3 +69,7 @@ class ScannerImportRequest(BaseModel):
 
 class ModelCatalogRefreshRequest(BaseModel):
     provider: Literal["openrouter"] = "openrouter"
+
+
+class RoutingDefaultUpdate(BaseModel):
+    default_policy_id: str = Field(min_length=2, max_length=120)

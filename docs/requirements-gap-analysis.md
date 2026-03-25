@@ -17,7 +17,7 @@ This file tracks the current platform against the broader original vision and se
 | Accepts user-supplied API keys: Agentic | Not implemented | No Agentic provider exists in provider seeds, settings UI, runtime adapter, or tests | Needs provider config, UI, runtime adapter, and documentation |
 | Accepts user-supplied API keys: OpenRouter | Implemented | OpenRouter is seeded as a custom-auth provider; backend stores encrypted keys and uses OpenRouter-compatible `chat/completions` requests | Production hardening still needs tenant isolation and stronger secrets lifecycle |
 | Enumerates and can use 400+ models via plugin/config | Partially implemented (gaps) | OpenRouter now has startup refresh + manual refresh + UI browsing in Settings and Run Detail backed by the OpenRouter Models API with manual fallback | Still limited to OpenRouter only; no broader plugin/config registry or cross-provider catalog yet |
-| Multi-model orchestration (routing, fallback, policy selection) | Not implemented | Each analysis request currently selects one provider and one model | Needs router, policy engine, fallback handling, latency/cost heuristics, and observability |
+| Multi-model orchestration (routing, fallback, policy selection) | Partially implemented (gaps) | Reliability-first routing policies now exist with Settings default selection, Run Detail policy selection, one fallback route, and explicit primary/fallback error reporting | Still needs richer strategies, telemetry, cost/latency signals, and broader dynamic policy management |
 | Multi-agent workflows | Partially implemented (gaps) | Runs seed planner/reporter-style tasks and show workflow stages in the UI | Tasks are timeline records, not a true agent runtime with memory, tools, state transitions, or coordination |
 | Audits code/apps/websites/scripts directly | Partially implemented (gaps) | Targets, runs, evidence capture, imports, findings, and reports are implemented | No built-in execution plane or scanner runner exists yet; current flow depends on imported or pasted results |
 | Extensible with additional techniques | Partially implemented (gaps) | Flexible scanner import and provider configuration create extension points | No formal plugin registry, sandboxed tool runner, or enforced technique policy engine exists |
@@ -50,9 +50,9 @@ The current repo now explicitly supports:
 - keep preparing the transition into Priority C routing work
 
 ### After that: Priority C
-- introduce routing groups and fallback policy objects
-- support latency / cost / availability-aware fallback
-- add audit logging for selected route decisions
+- expand beyond reliability-first into latency / cost / availability-aware routing
+- add richer policy editing, telemetry, and route health signals
+- keep building audit logging and observability around route decisions
 
 ### Longer-term roadmap
 - multi-agent runtime with tool state and memory

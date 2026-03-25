@@ -74,6 +74,12 @@ This README is written for both:
 - Browse OpenRouter model names from both Settings and Run Detail
 - Fall back to a curated manual list if the remote catalog is unavailable
 
+### 2c) Reliability-first routing
+- Choose a default routing policy in Settings
+- Select a routing policy per analysis run
+- Try the primary route first, then one fallback route
+- Show the primary and fallback error reasons if both routes fail
+
 ### 3) Scanner import and normalization
 - Import scanner output as **plain text** or **JSON**
 - Convert valid entries into normalized findings

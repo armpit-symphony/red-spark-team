@@ -8,15 +8,18 @@ import { api } from '../lib/api';
 export default function SettingsPage() {
   const [providers, setProviders] = useState([]);
   const [openRouterCatalog, setOpenRouterCatalog] = useState({ models: [], model_count: 0, source: '', refresh_status: '', last_refreshed_at: '' });
+  const [routingState, setRoutingState] = useState({ default_policy_id: 'direct', policies: [] });
   const [savingProvider, setSavingProvider] = useState('');
   const [removingProvider, setRemovingProvider] = useState('');
   const [refreshingCatalog, setRefreshingCatalog] = useState(false);
+  const [savingRouting, setSavingRouting] = useState(false);
 
   const loadPage = useCallback(async () => {
     try {
-      const [providerData, catalogData] = await Promise.all([api.get('/providers'), api.get('/model-catalog?provider=openrouter')]);
+      const [providerData, catalogData, routingData] = await Promise.all([api.get('/providers'), api.get('/model-catalog?provider=openrouter'), api.get('/routing-policies')]);
       setProviders(providerData);
       setOpenRouterCatalog(catalogData);
+      setRoutingState(routingData);
     } catch (error) {
       toast.error(error.message);
     }
@@ -66,6 +69,19 @@ export default function SettingsPage() {
       toast.error(error.message);
     } finally {
       setRefreshingCatalog(false);
+    }
+  };
+
+  const saveDefaultRoutingPolicy = async () => {
+    try {
+      setSavingRouting(true);
+      const updated = await api.put('/routing-policies/default', { default_policy_id: routingState.default_policy_id });
+      setRoutingState(updated);
+      toast.success('Default routing policy saved');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingRouting(false);
     }
   };
 
@@ -121,6 +137,47 @@ export default function SettingsPage() {
             <div className="field-stack"><label className="field-label">Enabled</label><label><input type="checkbox" checked={provider.enabled} onChange={(e) => updateField(provider.provider, 'enabled', e.target.checked)} data-testid={`provider-enabled-checkbox-${provider.provider}`} /> Active for analysis requests</label></div>
           </article>
         ))}
+      </section>
+
+      <section className="stack" data-testid="routing-settings-panel">
+        <article className="panel">
+          <div className="panel-header">
+            <div>
+              <div className="eyebrow">Reliability Router</div>
+              <h2 className="panel-title" data-testid="routing-settings-title">Choose the default routing policy</h2>
+              <p className="panel-copy" data-testid="routing-settings-copy">The router tries the primary route first, then one fallback route, and shows the failure reason if both fail.</p>
+            </div>
+            <Button onClick={saveDefaultRoutingPolicy} disabled={savingRouting} data-testid="routing-default-save-button">
+              {savingRouting ? 'Saving…' : 'Save default'}
+            </Button>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Default policy</label>
+            <select className="select" value={routingState.default_policy_id} onChange={(event) => setRoutingState((current) => ({ ...current, default_policy_id: event.target.value }))} data-testid="routing-default-select">
+              <option value="direct">Direct provider selection</option>
+              {routingState.policies.map((policy) => <option key={policy.id} value={policy.id}>{policy.label}</option>)}
+            </select>
+          </div>
+        </article>
+
+        <section className="grid-2" data-testid="routing-policy-grid">
+          {routingState.policies.map((policy) => (
+            <article key={policy.id} className="panel" data-testid={`routing-policy-card-${policy.id}`}>
+              <div className="panel-header">
+                <div>
+                  <div className="eyebrow">{policy.goal.replaceAll('_', ' ')}</div>
+                  <h3 className="panel-title" data-testid={`routing-policy-title-${policy.id}`}>{policy.label}</h3>
+                </div>
+                {routingState.default_policy_id === policy.id ? <span className="badge badge--approved" data-testid={`routing-policy-default-${policy.id}`}>default</span> : null}
+              </div>
+              <p className="panel-copy" data-testid={`routing-policy-description-${policy.id}`}>{policy.description}</p>
+              <div className="stack-sm" style={{ marginTop: 12 }}>
+                <div className="muted" data-testid={`routing-policy-primary-${policy.id}`}>Primary: {policy.primary.provider} · {policy.primary.model}</div>
+                <div className="muted" data-testid={`routing-policy-fallback-${policy.id}`}>Fallback: {policy.fallback.provider} · {policy.fallback.model}</div>
+              </div>
+            </article>
+          ))}
+        </section>
       </section>
     </div>
   );

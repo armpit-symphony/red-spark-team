@@ -46,9 +46,10 @@ export default function RunDetailPage() {
   const [activeTab, setActiveTab] = useState('tasks');
   const [bundle, setBundle] = useState({ run: null, tasks: [], findings: [], sections: [], report: null });
   const [providers, setProviders] = useState([]);
-  const [analysisConfig, setAnalysisConfig] = useState({ provider: 'openai', model: 'gpt-5.2', analysis_type: 'report_draft', focus: '' });
+  const [analysisConfig, setAnalysisConfig] = useState({ provider: 'openai', model: 'gpt-5.2', analysis_type: 'report_draft', focus: '', routing_policy_id: 'direct' });
   const [sectionDrafts, setSectionDrafts] = useState({});
   const [openRouterCatalog, setOpenRouterCatalog] = useState({ models: [], model_count: 0, source: '', refresh_status: '' });
+  const [routingState, setRoutingState] = useState({ default_policy_id: 'direct', policies: [] });
   const [importDraft, setImportDraft] = useState(initialImportDraft);
   const [importSummary, setImportSummary] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -56,13 +57,14 @@ export default function RunDetailPage() {
   const [exportingAction, setExportingAction] = useState('');
 
   const loadBundle = useCallback(async () => {
-    const [runData, providerData, catalogData] = await Promise.all([api.get(`/runs/${runId}`), api.get('/providers'), api.get('/model-catalog?provider=openrouter')]);
+    const [runData, providerData, catalogData, routingData] = await Promise.all([api.get(`/runs/${runId}`), api.get('/providers'), api.get('/model-catalog?provider=openrouter'), api.get('/routing-policies')]);
     setBundle(runData);
     setProviders(providerData.filter((provider) => provider.enabled));
     setOpenRouterCatalog(catalogData);
+    setRoutingState(routingData);
     const firstProvider = providerData.find((provider) => provider.enabled);
     if (firstProvider) {
-      setAnalysisConfig((current) => ({ ...current, provider: firstProvider.provider, model: firstProvider.model }));
+      setAnalysisConfig((current) => ({ ...current, provider: firstProvider.provider, model: firstProvider.model, routing_policy_id: routingData.default_policy_id || current.routing_policy_id }));
     }
     setSectionDrafts(syncSectionDrafts(runData.sections));
   }, [runId]);
@@ -73,6 +75,7 @@ export default function RunDetailPage() {
 
   const run = bundle.run;
   const reportMarkdown = useMemo(() => bundle.report?.markdown || sectionDrafts['report-draft']?.content || 'No report draft yet.', [bundle.report, sectionDrafts]);
+  const selectedRoutingPolicy = useMemo(() => routingState.policies.find((policy) => policy.id === analysisConfig.routing_policy_id) || null, [routingState, analysisConfig.routing_policy_id]);
 
   const saveSection = async (sectionKey) => {
     try {
@@ -182,8 +185,9 @@ export default function RunDetailPage() {
           <Button onClick={runAnalysis} variant={analysisConfig.analysis_type === 'report_draft' ? 'primary' : 'ghost'} data-testid="run-analysis-submit-button">Run analysis</Button>
         </div>
         <div className="field-grid" style={{ marginTop: 16 }}>
-          <div className="field"><label className="field-label">Provider</label><select className="select" value={analysisConfig.provider} onChange={(e) => { const selected = providers.find((provider) => provider.provider === e.target.value); setAnalysisConfig({ ...analysisConfig, provider: e.target.value, model: selected?.model || analysisConfig.model }); }} data-testid="run-analysis-provider-select">{providers.map((provider) => <option key={provider.provider} value={provider.provider}>{provider.label}</option>)}</select></div>
-          <div className="field"><label className="field-label">Model</label>{analysisConfig.provider === 'openrouter' && openRouterCatalog.models.length ? <select className="select" value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-select">{openRouterCatalog.models.some((model) => model.model_id === analysisConfig.model) ? null : <option value={analysisConfig.model}>{analysisConfig.model}</option>}{openRouterCatalog.models.map((model) => <option key={model.model_id} value={model.model_id}>{model.name}</option>)}</select> : <Input value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-input" />}{analysisConfig.provider === 'openrouter' ? <div className="muted" style={{ marginTop: 8 }} data-testid="run-analysis-openrouter-catalog-meta">{openRouterCatalog.model_count || 0} catalog models · {openRouterCatalog.source || 'unknown source'}</div> : null}</div>
+          <div className="field"><label className="field-label">Routing policy</label><select className="select" value={analysisConfig.routing_policy_id} onChange={(e) => setAnalysisConfig({ ...analysisConfig, routing_policy_id: e.target.value })} data-testid="run-analysis-routing-policy-select"><option value="direct">Direct provider selection</option>{routingState.policies.map((policy) => <option key={policy.id} value={policy.id}>{policy.label}</option>)}</select></div>
+          {analysisConfig.routing_policy_id === 'direct' ? <div className="field"><label className="field-label">Provider</label><select className="select" value={analysisConfig.provider} onChange={(e) => { const selected = providers.find((provider) => provider.provider === e.target.value); setAnalysisConfig({ ...analysisConfig, provider: e.target.value, model: selected?.model || analysisConfig.model }); }} data-testid="run-analysis-provider-select">{providers.map((provider) => <option key={provider.provider} value={provider.provider}>{provider.label}</option>)}</select></div> : <div className="field"><label className="field-label">Primary route</label><div className="panel-copy" data-testid="run-analysis-primary-route">{selectedRoutingPolicy ? `${selectedRoutingPolicy.primary.provider} · ${selectedRoutingPolicy.primary.model}` : 'No routing policy selected'}</div></div>}
+          {analysisConfig.routing_policy_id === 'direct' ? <div className="field"><label className="field-label">Model</label>{analysisConfig.provider === 'openrouter' && openRouterCatalog.models.length ? <select className="select" value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-select">{openRouterCatalog.models.some((model) => model.model_id === analysisConfig.model) ? null : <option value={analysisConfig.model}>{analysisConfig.model}</option>}{openRouterCatalog.models.map((model) => <option key={model.model_id} value={model.model_id}>{model.name}</option>)}</select> : <Input value={analysisConfig.model} onChange={(e) => setAnalysisConfig({ ...analysisConfig, model: e.target.value })} data-testid="run-analysis-model-input" />}{analysisConfig.provider === 'openrouter' ? <div className="muted" style={{ marginTop: 8 }} data-testid="run-analysis-openrouter-catalog-meta">{openRouterCatalog.model_count || 0} catalog models · {openRouterCatalog.source || 'unknown source'}</div> : null}</div> : <div className="field"><label className="field-label">Fallback route</label><div className="panel-copy" data-testid="run-analysis-fallback-route">{selectedRoutingPolicy ? `${selectedRoutingPolicy.fallback.provider} · ${selectedRoutingPolicy.fallback.model}` : 'No fallback route configured'}</div><div className="muted" style={{ marginTop: 8 }} data-testid="run-analysis-routing-note">One fallback only. If both routes fail, the analysis error explains why.</div></div>}
           <div className="field"><label className="field-label">Output type</label><select className="select" value={analysisConfig.analysis_type} onChange={(e) => setAnalysisConfig({ ...analysisConfig, analysis_type: e.target.value })} data-testid="run-analysis-type-select"><option value="report_draft">Report draft</option><option value="finding_summary">Finding summary</option><option value="remediation_plan">Remediation plan</option></select></div>
           <div className="field"><label className="field-label">Focus</label><Input value={analysisConfig.focus} onChange={(e) => setAnalysisConfig({ ...analysisConfig, focus: e.target.value })} data-testid="run-analysis-focus-input" /></div>
         </div>

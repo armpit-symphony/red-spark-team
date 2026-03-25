@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import clean_document, database
 from llm_service import run_provider_analysis
 from model_catalog_service import refresh_openrouter_catalog
-from models import AnalysisRequest, ModelCatalogRefreshRequest, PolicyUpdate, ProviderUpdate, RunCreate, ScannerImportRequest, SectionUpsert, TargetCreate, now_iso
+from models import AnalysisRequest, ModelCatalogRefreshRequest, PolicyUpdate, ProviderUpdate, RoutingDefaultUpdate, RunCreate, ScannerImportRequest, SectionUpsert, TargetCreate, now_iso
+from routing_service import get_routing_state, sync_routing_policies
 from security_utils import encrypt_secret
 from seed import seed_database
 
@@ -375,6 +376,7 @@ async def startup_event():
     await migrate_provider_storage()
     await migrate_report_reviews()
     await refresh_openrouter_catalog(database)
+    await sync_routing_policies(database)
 
 
 @app.get("/api/health")
@@ -481,6 +483,27 @@ async def refresh_model_catalog(payload: ModelCatalogRefreshRequest):
     await log_event("refreshed-model-catalog", f"Refreshed {payload.provider} model catalog with {meta['model_count']} entries via {meta['source']}.")
     models = [clean_document(item) async for item in database.model_catalog.find({"provider": payload.provider}, {"_id": 0}).sort("name", 1)]
     return {**meta, "models": models}
+
+
+@app.get("/api/routing-policies")
+async def get_routing_policies():
+    return await get_routing_state(database)
+
+
+@app.put("/api/routing-policies/default")
+async def update_default_routing_policy(payload: RoutingDefaultUpdate):
+    if payload.default_policy_id != "direct":
+        policy = clean_document(await database.routing_policies.find_one({"id": payload.default_policy_id}, {"_id": 0}))
+        if not policy:
+            raise HTTPException(status_code=404, detail="Routing policy not found.")
+
+    await database.routing_settings.update_one(
+        {"id": "default-routing-settings"},
+        {"$set": {"id": "default-routing-settings", "default_policy_id": payload.default_policy_id, "updated_at": now_iso()}},
+        upsert=True,
+    )
+    await log_event("updated-routing-default", f"Updated default routing policy to {payload.default_policy_id}.")
+    return await get_routing_state(database)
 
 
 @app.put("/api/providers/{provider_name}")
@@ -645,18 +668,79 @@ async def upsert_section(run_id: str, payload: SectionUpsert):
 @app.post("/api/runs/{run_id}/analysis")
 async def analyze_run(run_id: str, payload: AnalysisRequest):
     bundle = await get_run_bundle(run_id)
-    provider = clean_document(await database.providers.find_one({"provider": payload.provider}, {"_id": 0}))
-    if not provider:
-        raise HTTPException(status_code=404, detail="Provider not configured.")
-    if not provider.get("enabled"):
-        raise HTTPException(status_code=400, detail="Selected provider is disabled in settings.")
+    route_trace = {
+        "mode": "direct",
+        "routing_policy_id": "direct",
+        "policy_label": "Direct selection",
+        "selected_provider": payload.provider,
+        "selected_model": payload.model,
+        "used_fallback": False,
+        "fallback_reason": "",
+    }
 
-    provider["model"] = payload.model
+    async def run_candidate(provider_name: str, model_name: str):
+        provider_record = clean_document(await database.providers.find_one({"provider": provider_name}, {"_id": 0}))
+        if not provider_record:
+            raise RuntimeError(f"Provider {provider_name} is not configured.")
+        if not provider_record.get("enabled"):
+            raise RuntimeError(f"Provider {provider_name} is disabled in settings.")
 
-    try:
-        content = await run_provider_analysis(provider, bundle["run"], bundle["sections"], payload.analysis_type, payload.focus)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        provider_record["model"] = model_name
+        return await run_provider_analysis(provider_record, bundle["run"], bundle["sections"], payload.analysis_type, payload.focus)
+
+    if payload.routing_policy_id != "direct":
+        routing_policy = clean_document(await database.routing_policies.find_one({"id": payload.routing_policy_id}, {"_id": 0}))
+        if not routing_policy:
+            raise HTTPException(status_code=404, detail="Routing policy not found.")
+
+        primary = routing_policy["primary"]
+        fallback = routing_policy.get("fallback")
+        primary_error = ""
+
+        try:
+            content = await run_candidate(primary["provider"], primary["model"])
+            route_trace = {
+                "mode": "routing_policy",
+                "routing_policy_id": routing_policy["id"],
+                "policy_label": routing_policy["label"],
+                "selected_provider": primary["provider"],
+                "selected_model": primary["model"],
+                "used_fallback": False,
+                "fallback_reason": "",
+            }
+        except Exception as exc:  # noqa: BLE001
+            primary_error = str(exc)
+            if not fallback:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Routing policy {routing_policy['label']} failed. Primary route {primary['provider']}:{primary['model']} error: {primary_error}",
+                ) from exc
+
+            try:
+                content = await run_candidate(fallback["provider"], fallback["model"])
+                route_trace = {
+                    "mode": "routing_policy",
+                    "routing_policy_id": routing_policy["id"],
+                    "policy_label": routing_policy["label"],
+                    "selected_provider": fallback["provider"],
+                    "selected_model": fallback["model"],
+                    "used_fallback": True,
+                    "fallback_reason": primary_error,
+                }
+            except Exception as fallback_exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Routing policy {routing_policy['label']} failed. "
+                        f"Primary route {primary['provider']}:{primary['model']} error: {primary_error}. "
+                        f"Fallback route {fallback['provider']}:{fallback['model']} error: {fallback_exc}"
+                    ),
+                ) from fallback_exc
+    else:
+        try:
+            content = await run_candidate(payload.provider, payload.model)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     section_key = payload.analysis_type.replace("_", "-")
     await database.artifacts.update_one(
@@ -697,11 +781,28 @@ async def analyze_run(run_id: str, payload: AnalysisRequest):
         await database.runs.update_one({"id": run_id}, {"$set": {"status": "completed", "updated_at": now_iso()}})
         await database.tasks.update_one(
             {"audit_run_id": run_id, "task_type": "reporter"},
-            {"$set": {"status": "completed", "output": "LLM draft saved to report workspace."}},
+            {
+                "$set": {
+                    "status": "completed",
+                    "output": (
+                        f"LLM draft saved to report workspace via {route_trace['selected_provider']}:{route_trace['selected_model']}"
+                        f" ({route_trace['policy_label']})."
+                    ),
+                }
+            },
         )
 
-    await log_event("analyzed-run", f"Generated {payload.analysis_type} using {payload.provider}:{payload.model}.")
-    return await get_run_bundle(run_id)
+    await log_event(
+        "analyzed-run",
+        (
+            f"Generated {payload.analysis_type} using {route_trace['selected_provider']}:{route_trace['selected_model']} "
+            f"via {route_trace['policy_label']}"
+            f"{' after fallback' if route_trace['used_fallback'] else ''}."
+        ),
+    )
+    result = await get_run_bundle(run_id)
+    result["last_analysis_route"] = route_trace
+    return result
 
 
 @app.get("/api/findings")
