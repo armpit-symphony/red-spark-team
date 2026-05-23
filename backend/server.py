@@ -19,7 +19,13 @@ from security_utils import encrypt_secret
 from seed import seed_database
 
 
+import os
+
 app = FastAPI(title="Unified Agentic Red-Team Audit Platform")
+_allowed_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+if not _allowed_origins:
+    _allowed_origins = ["*"]
+_allow_credentials = "*" not in _allowed_origins
 
 SEVERITY_MAP = {
     "critical": "critical",
@@ -41,8 +47,8 @@ JSON_FINDING_KEYS = ["findings", "results", "issues", "vulnerabilities", "alerts
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_allowed_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,12 +1,10 @@
-version: "3.9"
-
 services:
   mongo:
     image: mongo:7
     restart: unless-stopped
     command: ["mongod", "--bind_ip_all"]
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
 
@@ -18,10 +16,11 @@ services:
       MONGO_URL: mongodb://mongo:27017
       DB_NAME: red_spark_team
       EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://127.0.0.1:3000}
     depends_on:
       - mongo
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
 
   frontend:
     build:

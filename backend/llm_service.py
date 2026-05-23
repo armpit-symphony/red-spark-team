@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from litellm import acompletion
 
 from security_utils import decrypt_secret
 
@@ -45,14 +45,18 @@ async def run_prompt_analysis(provider_config: dict[str, Any], session_id: str, 
         if not api_key:
             raise RuntimeError(f"No API key configured for provider {provider}.")
 
-        chat = LlmChat(
+        response = await acompletion(
+            model=f"{provider}/{model}",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt},
+            ],
             api_key=api_key,
-            session_id=session_id,
-            system_message=system_message,
-        ).with_model(provider, model)
-
-        response = await chat.send_message(UserMessage(text=prompt))
-        return response.strip()
+        )
+        content = response.choices[0].message.content
+        if not isinstance(content, str):
+            raise RuntimeError(f"Empty response from {provider} provider.")
+        return content.strip()
 
     if provider in {"openrouter", "minimax"}:
         base_url = provider_config.get("base_url", "").rstrip("/")
